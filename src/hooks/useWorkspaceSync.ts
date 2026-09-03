@@ -48,6 +48,9 @@ export function useWorkspaceSync(
   const appDataRef = useRef<AppData>(appData);
   appDataRef.current = appData;
 
+  // Track last saved projects JSON from local client to prevent redundant re-renders on remote echo
+  const lastSavedProjectsJsonRef = useRef<string>('');
+
   // Debounce ref for Firestore write operations
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isIncomingRemoteUpdateRef = useRef<boolean>(false);
@@ -103,14 +106,26 @@ export function useWorkspaceSync(
               setSyncStatus('saving');
             } else {
               // Remote update from another device or confirmed server write
-              isIncomingRemoteUpdateRef.current = true;
-              setAppData(remoteData);
-              try {
-                localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(remoteData));
-              } catch {}
-              setSyncStatus('synced');
-              setLastSyncedAt(new Date());
-              setSyncError(null);
+              const remoteProjectsJson = JSON.stringify(remoteData.projects);
+              const isLocalMatch = remoteProjectsJson === lastSavedProjectsJsonRef.current;
+              const hasPendingLocalTimeout = saveTimeoutRef.current !== null;
+
+              // If this snapshot is just an echo of our own recent local write or we have pending local changes,
+              // do NOT overwrite local appData to avoid UI flicker or interrupting consecutive edits
+              if (isLocalMatch || hasPendingLocalTimeout) {
+                setSyncStatus('synced');
+                setLastSyncedAt(new Date());
+                setSyncError(null);
+              } else {
+                isIncomingRemoteUpdateRef.current = true;
+                setAppData(remoteData);
+                try {
+                  localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(remoteData));
+                } catch {}
+                setSyncStatus('synced');
+                setLastSyncedAt(new Date());
+                setSyncError(null);
+              }
             }
           }
           setIsInitialCloudLoaded(true);
@@ -143,6 +158,9 @@ export function useWorkspaceSync(
       // 1. Immediate optimistic UI update
       setAppData(newData);
       appDataRef.current = newData;
+      try {
+        lastSavedProjectsJsonRef.current = JSON.stringify(newData.projects);
+      } catch {}
 
       // 2. Persist to localStorage immediately for instant offline safety
       try {

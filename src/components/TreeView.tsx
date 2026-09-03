@@ -269,12 +269,12 @@ export const TreeView: React.FC<TreeViewProps> = ({
                   {item.name}
                 </span>
                 {item.showInSummary && (
-                  <span
-                    className="inline-flex items-center justify-center p-1 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0"
-                    title="Summary / Calendar Reporting Level"
-                  >
-                    <Target className="w-3 h-3" />
-                  </span>
+                  <Target
+                    className="w-2 h-2 text-amber-400/90 shrink-0 inline-block self-center"
+                    size={8}
+                    strokeWidth={2.5}
+                    title="Summary / Calendar Reporting Target"
+                  />
                 )}
               </div>
               {item.notes && item.notes.trim().length > 0 && (

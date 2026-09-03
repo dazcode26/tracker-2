@@ -186,15 +186,41 @@ export const ItemModal: React.FC<ItemModalProps> = ({
       setStatus('not-started');
       setAssigneeId(persons[0]?.id || '');
       setReviewerId(null);
-      setTargetDate(initialTargetDate ? initialTargetDate.split('T')[0] : '');
-      setActualStartDate('');
-      setActualEndDate('');
       setEstimatedHours('');
       setNotes('');
-      setSessions([]);
-      setShowInSummary(false);
+
+      // If initialTargetDate is provided from clicking on the calendar:
+      // Prepopulate the Realization Period (Add Period), NOT the Due Date!
+      if (initialTargetDate) {
+        const clickedDate = initialTargetDate.split('T')[0];
+        setTargetDate('');
+        setActualStartDate(clickedDate);
+        setActualEndDate(clickedDate);
+        setSessions([
+          {
+            id: `manual-init-${Date.now()}`,
+            type: 'manual-range',
+            startedAt: `${clickedDate}T00:00:00.000Z`,
+            endedAt: `${clickedDate}T00:00:00.000Z`,
+            loggedSeconds: 0,
+            title: 'Realization Period',
+          },
+        ]);
+        setShowInSummary(true);
+      } else {
+        setTargetDate('');
+        setActualStartDate('');
+        setActualEndDate('');
+        setSessions([]);
+        setShowInSummary(false);
+      }
+
       setSelectedParentId(parentItemId || 'root');
-      setSelectedTargetProjectId(currentProjectId || projects[0]?.id || '');
+      const validTargetProjId =
+        currentProjectId && currentProjectId !== 'all'
+          ? currentProjectId
+          : (projects[0]?.id || '');
+      setSelectedTargetProjectId(validTargetProjId);
     }
   }, [initialItem, initialTargetDate, isOpen, persons, parentItemId, currentProjectId, projects]);
 
@@ -360,6 +386,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
     const computed = computeActualDatesFromSessions(updatedSessions);
     setActualStartDate(computed.actualStartDate || '');
     setActualEndDate(computed.actualEndDate || '');
+    setShowInSummary(true);
 
     setNewPeriodStart('');
     setNewPeriodEnd('');
@@ -400,6 +427,11 @@ export const ItemModal: React.FC<ItemModalProps> = ({
     const hoursNum = typeof estimatedHours === 'number' ? estimatedHours : parseFloat(String(estimatedHours));
     const calculatedEstimatedSeconds = !isNaN(hoursNum) && hoursNum > 0 ? Math.round(hoursNum * 3600) : 0;
 
+    const validTargetProjectId =
+      selectedTargetProjectId && selectedTargetProjectId !== 'all'
+        ? selectedTargetProjectId
+        : (activeProj?.id || projects[0]?.id || '');
+
     onSaveItem({
       name: taskTitle,
       status,
@@ -413,7 +445,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
       sessions,
       showInSummary,
       targetParentId: selectedParentId,
-      targetProjectId: selectedTargetProjectId || activeProj?.id,
+      targetProjectId: validTargetProjectId,
     });
 
     onClose();
@@ -1013,10 +1045,16 @@ export const ItemModal: React.FC<ItemModalProps> = ({
                         type="date"
                         value={newPeriodStart}
                         onChange={(e) => {
-                          setNewPeriodStart(e.target.value);
-                          if (!newPeriodEnd) setNewPeriodEnd(e.target.value);
+                          const val = e.target.value;
+                          setNewPeriodStart(val);
+                          if (!newPeriodEnd || newPeriodEnd < val) setNewPeriodEnd(val);
                         }}
-                        className="w-full bg-[#121215] border border-[#27272a] rounded-lg px-2.5 py-1.5 text-xs text-[#f4f4f5] outline-none focus:border-orange-500"
+                        onClick={(e) => {
+                          try {
+                            (e.currentTarget as any).showPicker?.();
+                          } catch {}
+                        }}
+                        className="w-full bg-[#121215] border border-[#27272a] rounded-lg px-2.5 py-1.5 text-xs text-[#f4f4f5] outline-none focus:border-orange-500 cursor-pointer"
                       />
                     </div>
 
@@ -1027,8 +1065,14 @@ export const ItemModal: React.FC<ItemModalProps> = ({
                       <input
                         type="date"
                         value={newPeriodEnd}
+                        min={newPeriodStart || undefined}
                         onChange={(e) => setNewPeriodEnd(e.target.value)}
-                        className="w-full bg-[#121215] border border-[#27272a] rounded-lg px-2.5 py-1.5 text-xs text-[#f4f4f5] outline-none focus:border-orange-500"
+                        onClick={(e) => {
+                          try {
+                            (e.currentTarget as any).showPicker?.();
+                          } catch {}
+                        }}
+                        className="w-full bg-[#121215] border border-[#27272a] rounded-lg px-2.5 py-1.5 text-xs text-[#f4f4f5] outline-none focus:border-orange-500 cursor-pointer"
                       />
                     </div>
 
@@ -1050,7 +1094,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsAddingPeriod(false)}
-                      className="px-3 py-1.5 text-xs text-[#a1a1aa] hover:text-[#f4f4f5] rounded-lg hover:bg-[#27272a] transition-colors"
+                      className="px-3 py-1.5 text-xs text-[#a1a1aa] hover:text-[#f4f4f5] rounded-lg hover:bg-[#27272a] transition-colors cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -1073,7 +1117,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
                   </span>
                   <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                     {sessions.map((s, idx) => {
-                      const isTimer = s.type === 'timer' || (s.loggedSeconds && s.loggedSeconds > 0);
+                      const isTimer = Boolean(s.type === 'timer' || (s.loggedSeconds && s.loggedSeconds > 0));
                       const startStr = s.startedAt ? new Date(s.startedAt).toLocaleDateString('en-GB') : '';
                       const endStr = s.endedAt ? new Date(s.endedAt).toLocaleDateString('en-GB') : startStr;
                       const isMultiDay = startStr !== endStr;

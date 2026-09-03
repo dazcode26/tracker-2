@@ -34,6 +34,7 @@ import {
   toggleItemExpandInProjects,
   setAllExpandInProjects,
   reassignPersonTasksInProjects,
+  setMilestoneTarget,
 } from './utils/treeUtils';
 
 function WorkspaceApp() {
@@ -311,8 +312,10 @@ function WorkspaceApp() {
           sessions: allSessions,
           actualStartDate: computed.actualStartDate,
           actualEndDate: computed.actualEndDate,
+          showInSummary: true,
         };
       });
+      updatedProjects = setMilestoneTarget(updatedProjects, activeTimer.itemId);
     }
 
     const updatedData: AppData = {
@@ -370,8 +373,10 @@ function WorkspaceApp() {
           sessions: allSessions,
           actualStartDate: computed.actualStartDate,
           actualEndDate: computed.actualEndDate,
+          showInSummary: true,
         };
       });
+      workingProjects = setMilestoneTarget(workingProjects, currentActiveTimer.itemId);
 
       const prevStopLog = {
         id: `log-${Date.now()}-stop`,
@@ -490,12 +495,16 @@ function WorkspaceApp() {
         return updated;
       });
 
+      if (fields.showInSummary === true) {
+        updatedProjects = setMilestoneTarget(updatedProjects, editingItem.id);
+      }
+
       // 2. Check if parent or project position changed
       const currentLoc = findItemAndProject(appData.projects, editingItem.id);
       const currentParentId = currentLoc?.parent ? currentLoc.parent.id : 'root';
       const currentProjId = currentLoc?.project.id || '';
 
-      const destProjId = newTargetProjId || currentProjId;
+      const destProjId = (newTargetProjId && newTargetProjId !== 'all') ? newTargetProjId : currentProjId;
       const destParentId = targetParentId !== undefined ? targetParentId : currentParentId;
 
       if (destParentId !== currentParentId || destProjId !== currentProjId) {
@@ -528,12 +537,21 @@ function WorkspaceApp() {
         estimatedSeconds: itemData.estimatedSeconds ?? 0,
         notes: itemData.notes || '',
         sessions: itemData.sessions || [],
+        showInSummary: itemData.showInSummary === true,
         subItems: [],
       };
 
       let updatedProjects = appData.projects;
       const chosenParentId = targetParentId !== undefined && targetParentId !== 'root' ? targetParentId : targetParentItemId;
-      const projId = newTargetProjId || targetProjectId || selectedProjectId || appData.projects[0]?.id;
+      const candidateProj =
+        newTargetProjId && newTargetProjId !== 'all'
+          ? newTargetProjId
+          : targetProjectId && targetProjectId !== 'all'
+          ? targetProjectId
+          : selectedProjectId && selectedProjectId !== 'all'
+          ? selectedProjectId
+          : appData.projects[0]?.id;
+      const projId = candidateProj || appData.projects[0]?.id;
 
       if (chosenParentId && chosenParentId !== 'root') {
         // Add as child sub-task
@@ -546,6 +564,10 @@ function WorkspaceApp() {
           }
           return p;
         });
+      }
+
+      if (newItem.showInSummary) {
+        updatedProjects = setMilestoneTarget(updatedProjects, newItem.id);
       }
 
       const updatedData: AppData = {

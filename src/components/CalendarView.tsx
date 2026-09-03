@@ -83,6 +83,7 @@ interface MonthDayTask {
   totalDurationSeconds: number;
   sessionCount: number;
   timeRangeStr?: string;
+  earliestStartMs?: number;
 }
 
 const DAYS_OF_WEEK_MON = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -600,6 +601,29 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
         const isAllDay = itemEvents.every((e) => e.isAllDay) || timedSessions.length === 0;
 
+        // Calculate earliest session start timestamp on this date for accurate chronological ordering
+        let earliestStartMs: number | undefined;
+        for (const ev of itemEvents) {
+          if (ev.isSession && ev.item.sessions) {
+            for (const sess of ev.item.sessions) {
+              if (sess.startedAt) {
+                const sDate = new Date(sess.startedAt);
+                if (formatDateKey(sDate) === dateKey) {
+                  const ms = sDate.getTime();
+                  if (earliestStartMs === undefined || ms < earliestStartMs) {
+                    earliestStartMs = ms;
+                  }
+                }
+              }
+            }
+          } else if (!ev.isAllDay && ev.startHour !== undefined) {
+            const ms = ev.startHour * 3600 * 1000;
+            if (earliestStartMs === undefined || ms < earliestStartMs) {
+              earliestStartMs = ms;
+            }
+          }
+        }
+
         tasksForDay.push({
           id: `month-task-${dateKey}-${itemId}`,
           itemId,
@@ -612,7 +636,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           totalDurationSeconds: totalDuration,
           sessionCount,
           timeRangeStr,
+          earliestStartMs,
         });
+      });
+
+      // Sort tasks chronologically: tasks starting earlier in the day appear first
+      tasksForDay.sort((a, b) => {
+        if (a.earliestStartMs !== undefined && b.earliestStartMs !== undefined) {
+          return a.earliestStartMs - b.earliestStartMs;
+        }
+        if (a.earliestStartMs !== undefined) return -1;
+        if (b.earliestStartMs !== undefined) return 1;
+        return 0;
       });
 
       map.set(dateKey, tasksForDay);
@@ -706,6 +741,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           // Regular single event
           consolidatedList.push(...itemEvents);
         }
+      });
+
+      // Sort consolidated items chronologically
+      consolidatedList.sort((a, b) => {
+        const hourA = a.startHour ?? (a.isAllDay ? 99 : 0);
+        const hourB = b.startHour ?? (b.isAllDay ? 99 : 0);
+        return hourA - hourB;
       });
 
       map.set(dateKey, consolidatedList);
@@ -961,7 +1003,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         onClick={(e) => {
                           e.stopPropagation();
                           if (onOpenAddItemModal) {
-                            onOpenAddItemModal(undefined, undefined, dateKey);
+                            const targetProj = currentProjectId !== 'all' ? currentProjectId : (activeProjects[0]?.id || appData.projects[0]?.id);
+                            onOpenAddItemModal(undefined, targetProj, dateKey);
                           }
                         }}
                         className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#27272a] text-[#a1a1aa] hover:text-white transition-all cursor-pointer"
@@ -1184,7 +1227,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     const clickY = e.clientY - rect.top;
                     const clickedHour = Math.floor(clickY / hourHeight);
                     if (onOpenAddItemModal) {
-                      onOpenAddItemModal(undefined, undefined, dKey);
+                      const targetProj = currentProjectId !== 'all' ? currentProjectId : (activeProjects[0]?.id || appData.projects[0]?.id);
+                      onOpenAddItemModal(undefined, targetProj, dKey);
                     }
                   }}
                 >
@@ -1523,7 +1567,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   const dKey = popoverDay.dateKey;
                   setPopoverDay(null);
                   if (onOpenAddItemModal) {
-                    onOpenAddItemModal(undefined, undefined, dKey);
+                    const targetProj = currentProjectId !== 'all' ? currentProjectId : (activeProjects[0]?.id || appData.projects[0]?.id);
+                    onOpenAddItemModal(undefined, targetProj, dKey);
                   }
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold transition-colors cursor-pointer"

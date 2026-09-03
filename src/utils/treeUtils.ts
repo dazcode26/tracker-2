@@ -1194,4 +1194,52 @@ export function duplicateProject(
   return { projects: newProjects, newProject };
 }
 
+/**
+ * Resolves milestone conflicts when an item is set as showInSummary === true.
+ * Clears showInSummary on its ancestors and descendants so the selected item
+ * is the unambiguous milestone target in Summary and Calendar.
+ */
+export function setMilestoneTarget(projects: ProjectNode[], targetItemId: string): ProjectNode[] {
+  return projects.map((proj) => {
+    function cleanTree(node: ItemNode): ItemNode {
+      if (node.id === targetItemId) {
+        return {
+          ...node,
+          showInSummary: true,
+          subItems: node.subItems ? clearShowInSummaryRecursive(node.subItems) : [],
+        };
+      }
+
+      const containsTarget = hasDescendant(node, targetItemId);
+      if (containsTarget) {
+        return {
+          ...node,
+          showInSummary: false,
+          subItems: node.subItems ? node.subItems.map((c) => cleanTree(c)) : [],
+        };
+      }
+
+      return node;
+    }
+
+    return {
+      ...proj,
+      items: proj.items.map((item) => cleanTree(item)),
+    };
+  });
+}
+
+function hasDescendant(node: ItemNode, targetId: string): boolean {
+  if (!node.subItems || node.subItems.length === 0) return false;
+  return node.subItems.some((child) => child.id === targetId || hasDescendant(child, targetId));
+}
+
+function clearShowInSummaryRecursive(items: ItemNode[]): ItemNode[] {
+  return items.map((item) => ({
+    ...item,
+    showInSummary: false,
+    subItems: item.subItems ? clearShowInSummaryRecursive(item.subItems) : [],
+  }));
+}
+
 

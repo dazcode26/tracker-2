@@ -49,6 +49,7 @@ interface DayTaskSummary {
   status: string;
   loggedSeconds: number;
   hasExplicitSession?: boolean;
+  earliestStartMs?: number;
 }
 
 interface DailyGroup {
@@ -342,6 +343,7 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
 
         const taskMap = dayMap.get(dateKey)!;
         const assignee = appData.persons.find((p) => p.id === item.assigneeId);
+        const sStartMs = d.getTime();
 
         if (taskMap.has(item.id)) {
           const existing = taskMap.get(item.id)!;
@@ -349,6 +351,9 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
           existing.hasExplicitSession = true;
           existing.fullPath = fullPath;
           existing.item = item;
+          if (existing.earliestStartMs === undefined || sStartMs < existing.earliestStartMs) {
+            existing.earliestStartMs = sStartMs;
+          }
         } else {
           taskMap.set(item.id, {
             itemId: item.id,
@@ -362,6 +367,7 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
             status: item.status,
             loggedSeconds: seconds,
             hasExplicitSession: true,
+            earliestStartMs: sStartMs,
           });
         }
       }
@@ -438,6 +444,7 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
                   }
 
                   const taskMap = dayMap.get(dateKey)!;
+                  const sStartMs = sStart.getTime();
                   if (!taskMap.has(item.id)) {
                     const assignee = appData.persons.find((p) => p.id === item.assigneeId);
                     taskMap.set(item.id, {
@@ -452,7 +459,13 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
                       status: item.status,
                       loggedSeconds: 0,
                       hasExplicitSession: true,
+                      earliestStartMs: sStartMs,
                     });
+                  } else {
+                    const existing = taskMap.get(item.id)!;
+                    if (existing.earliestStartMs === undefined || sStartMs < existing.earliestStartMs) {
+                      existing.earliestStartMs = sStartMs;
+                    }
                   }
                 }
                 curr.setDate(curr.getDate() + 1);
@@ -525,6 +538,17 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
     sortedDateKeys.forEach((dateKey) => {
       const taskMap = dayMap.get(dateKey)!;
       const tasks = Array.from(taskMap.values());
+
+      // Sort tasks chronologically by earliestStartMs (earlier sessions appear first)
+      tasks.sort((a, b) => {
+        if (a.earliestStartMs !== undefined && b.earliestStartMs !== undefined) {
+          return a.earliestStartMs - b.earliestStartMs;
+        }
+        if (a.earliestStartMs !== undefined) return -1;
+        if (b.earliestStartMs !== undefined) return 1;
+        return 0;
+      });
+
       const totalSeconds = tasks.reduce((sum, t) => sum + t.loggedSeconds, 0);
 
       const [y, m, d] = dateKey.split('-').map(Number);
