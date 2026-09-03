@@ -1,0 +1,547 @@
+import React, { useState, useEffect } from 'react';
+import {
+  LayoutDashboard,
+  ListTree,
+  Kanban,
+  SquareChartGantt,
+  CalendarDays,
+  CalendarRange,
+  BarChart3,
+  Users,
+  Archive,
+  Settings,
+  Square,
+  LogOut,
+  Sun,
+  Moon,
+  Cloud,
+  CloudOff,
+  CheckCircle2,
+  RefreshCw,
+  Loader2,
+  Terminal,
+} from 'lucide-react';
+import { ViewMode, AppData, AppTheme, AccentColor, AuthUser, SyncStatus } from '../types';
+import { findItemById, formatTimerClock } from '../utils/treeUtils';
+
+interface HeaderProps {
+  currentView: ViewMode;
+  onSelectView: (view: ViewMode) => void;
+  appData: AppData;
+  onStopTimer: () => void;
+  onOpenSettings: () => void;
+  onSignOut?: () => void;
+  onUpdateTheme?: (theme: AppTheme, accent: AccentColor) => void;
+  currentUser?: AuthUser | null;
+  syncStatus?: SyncStatus;
+  lastSyncedAt?: Date | null;
+  onTriggerSync?: () => Promise<void>;
+}
+
+export const Header: React.FC<HeaderProps> = ({
+  currentView,
+  onSelectView,
+  appData,
+  onStopTimer,
+  onOpenSettings,
+  onSignOut,
+  onUpdateTheme,
+  currentUser,
+  syncStatus = 'synced',
+  lastSyncedAt = null,
+  onTriggerSync,
+}) => {
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [showUserMenu, setShowUserMenu] = useState<boolean>(false);
+  const [isSyncingManual, setIsSyncingManual] = useState<boolean>(false);
+
+  const handleManualSyncClick = async () => {
+    if (!onTriggerSync || isSyncingManual) return;
+    try {
+      setIsSyncingManual(true);
+      await onTriggerSync();
+    } catch (e) {
+      console.warn('Manual sync failed:', e);
+    } finally {
+      setIsSyncingManual(false);
+    }
+  };
+
+  const isDarkMode = appData.settings.theme !== 'light';
+  const toggleTheme = () => {
+    if (onUpdateTheme) {
+      const nextTheme: AppTheme = isDarkMode ? 'light' : 'dark';
+      const currentAccent: AccentColor = appData.settings.accentColor || 'orange';
+      onUpdateTheme(nextTheme, currentAccent);
+    }
+  };
+
+  const userAvatar = currentUser?.photoURL || "https://lh3.googleusercontent.com/aida-public/AB6AXuA1gBlTYTp8-GLp4CO1qKF_MK8QS-LA0aGsNKem6-6o_4_kEWyIafMIjtGdFJLSChSRZeU5qveJXatyijFu88fBcOUmzSNyDmkFyxdAa6JWQJTVVVLdgAngROsgmZQPkR7VqQiKmbWoKabGJfDonVDgA_E2MUIsh9YZ-ZEi6BiRpP8oXom4wHTW_khz6FgpFnwmHFfhATrVxUorwTOoFluJPwfrtMQD-6EcrC5tRIrTk12f6KVpARIHIA";
+  const userDisplayName = currentUser?.displayName || "Project Manager";
+  const userEmail = currentUser?.email || "admin@tracker.com";
+
+  const activeTimer = appData.settings.activeTimer;
+  const activeItemInfo = activeTimer ? findItemById(appData, activeTimer.itemId) : null;
+
+  // Active timer live tick effect
+  useEffect(() => {
+    if (!activeTimer) {
+      setElapsedSeconds(0);
+      return;
+    }
+
+    const calculateElapsed = () => {
+      const startMs = new Date(activeTimer.startedAt).getTime();
+      const nowMs = Date.now();
+      const diff = Math.floor((nowMs - startMs) / 1000);
+      setElapsedSeconds(diff > 0 ? diff : 0);
+    };
+
+    calculateElapsed();
+    const interval = setInterval(calculateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [activeTimer]);
+
+  const navItems: { view: ViewMode; label: string; icon: React.ReactNode }[] = [
+    { view: 'projects', label: 'Tree', icon: <ListTree className="w-5 h-5 shrink-0" /> },
+    { view: 'tasks', label: 'Kanban', icon: <Kanban className="w-5 h-5 shrink-0" /> },
+    { view: 'timeline', label: 'Timeline', icon: <SquareChartGantt className="w-5 h-5 shrink-0" /> },
+    { view: 'calendar', label: 'Calendar', icon: <CalendarDays className="w-5 h-5 shrink-0" /> },
+    { view: 'analytics', label: 'Summary', icon: <BarChart3 className="w-5 h-5 shrink-0" /> },
+  ];
+
+  return (
+    <>
+      {/* Desktop Left Navigation Sidebar (Icon Rail Style) */}
+      <aside className="hidden md:flex fixed top-0 left-0 bottom-0 z-40 bg-[#101010] border-r border-[#27272a] flex-col items-center justify-between transition-all duration-300 w-16 py-3.5 select-none shadow-xl">
+        {/* Top Section: Nav Items directly at the top */}
+        <div className="flex flex-col items-center w-full px-2">
+          {/* Navigation Items List */}
+          <nav className="flex flex-col items-center gap-2.5 w-full">
+            {navItems.map((item) => {
+              const isActive = currentView === item.view;
+              return (
+                <div key={item.view} className="relative group w-full flex justify-center">
+                  <button
+                    onClick={() => onSelectView(item.view)}
+                    className={`flex items-center justify-center w-11 h-11 text-sm font-medium rounded-xl transition-all relative cursor-pointer ${
+                      isActive
+                        ? 'text-orange-400 font-semibold bg-orange-500/15 shadow-sm shadow-orange-500/10'
+                        : 'text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#18181b]'
+                    }`}
+                  >
+                    <span className={`transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-orange-400' : 'text-[#71717a] group-hover:text-orange-400'}`}>
+                      {item.icon}
+                    </span>
+                    {isActive && (
+                      <span className="absolute left-0 top-2 bottom-2 w-1 bg-orange-500 rounded-r-full" />
+                    )}
+                  </button>
+
+                  {/* Label floating badge shown ONLY on hover */}
+                  <div className="absolute left-14 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-2 transition-all duration-200 pointer-events-none bg-[#18181b] border border-[#27272a] text-[#f4f4f5] text-xs font-semibold px-3 py-1.5 rounded-xl whitespace-nowrap shadow-2xl z-50">
+                    {item.label}
+                  </div>
+                </div>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Bottom Section: Sync Status, Theme Toggle & User Profile Avatar */}
+        <div className="relative pt-2.5 border-t border-[#27272a]/80 w-full flex flex-col items-center gap-2">
+          {/* Cloud Sync Status Indicator Icon */}
+          <div className="relative group w-full flex justify-center">
+            <button
+              onClick={handleManualSyncClick}
+              disabled={isSyncingManual || syncStatus === 'saving'}
+              className="flex items-center justify-center w-10 h-10 rounded-xl text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#18181b] transition-all cursor-pointer relative"
+              title="Cloud Sync Status"
+            >
+              {syncStatus === 'saving' || isSyncingManual ? (
+                <Loader2 className="w-4 h-4 text-orange-400 animate-spin" />
+              ) : syncStatus === 'synced' ? (
+                <Cloud className="w-4 h-4 text-emerald-400" />
+              ) : syncStatus === 'offline' ? (
+                <CloudOff className="w-4 h-4 text-neutral-400" />
+              ) : (
+                <Terminal className="w-4 h-4 text-amber-400" />
+              )}
+              {/* Subtle status indicator dot */}
+              <span
+                className={`absolute top-2 right-2 w-1.5 h-1.5 rounded-full ${
+                  syncStatus === 'synced'
+                    ? 'bg-emerald-500'
+                    : syncStatus === 'saving' || isSyncingManual
+                    ? 'bg-orange-500 animate-ping'
+                    : syncStatus === 'offline'
+                    ? 'bg-neutral-500'
+                    : 'bg-amber-400'
+                }`}
+              />
+            </button>
+
+            {/* Hover Tooltip for Cloud Sync */}
+            <div className="absolute left-14 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-2 transition-all duration-200 pointer-events-none bg-[#18181b] border border-[#27272a] text-[#f4f4f5] text-xs font-semibold px-3 py-1.5 rounded-xl whitespace-nowrap shadow-2xl z-50">
+              {syncStatus === 'synced' && 'Cloud Synced (Multi-Device Active)'}
+              {(syncStatus === 'saving' || isSyncingManual) && 'Saving changes to Cloud...'}
+              {syncStatus === 'offline' && 'Offline (Saved Locally)'}
+              {syncStatus === 'dev-preview' && 'Dev Preview Mode (Local)'}
+              {syncStatus === 'error' && 'Sync Issue (Click to retry)'}
+            </div>
+          </div>
+
+          {/* Light / Dark Mode Toggle Button above Profile Avatar */}
+          <div className="relative group w-full flex justify-center">
+            <button
+              onClick={toggleTheme}
+              className="flex items-center justify-center w-10 h-10 rounded-xl text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#18181b] transition-all cursor-pointer relative"
+              title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {isDarkMode ? (
+                <Sun className="w-4 h-4 text-amber-400 hover:rotate-45 transition-transform duration-300" />
+              ) : (
+                <Moon className="w-4 h-4 text-indigo-400 -rotate-12 transition-transform duration-300" />
+              )}
+            </button>
+
+            {/* Hover Tooltip for Theme Switcher */}
+            <div className="absolute left-14 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-2 transition-all duration-200 pointer-events-none bg-[#18181b] border border-[#27272a] text-[#f4f4f5] text-xs font-semibold px-3 py-1.5 rounded-xl whitespace-nowrap shadow-2xl z-50">
+              {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+            </div>
+          </div>
+
+          {/* Profile Avatar Dropdown */}
+          <div className="relative group">
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="flex items-center justify-center p-1 rounded-full hover:ring-2 hover:ring-orange-500/50 transition-all cursor-pointer relative"
+            >
+              <img
+                src={userAvatar}
+                alt={userDisplayName}
+                className="w-9 h-9 rounded-full object-cover border border-[#3f3f46] group-hover:border-orange-500/50 transition-colors shrink-0"
+              />
+              <span
+                className={`absolute bottom-0.5 right-0.5 w-2 h-2 rounded-full border border-[#101010] ${
+                  syncStatus === 'synced' ? 'bg-emerald-500' : syncStatus === 'saving' ? 'bg-orange-500' : 'bg-amber-400'
+                }`}
+              />
+            </button>
+
+            {/* Hover Tooltip when popover is closed */}
+            {!showUserMenu && (
+              <div className="absolute left-14 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-2 transition-all duration-200 pointer-events-none bg-[#18181b] border border-[#27272a] text-[#f4f4f5] text-xs font-semibold px-3 py-1.5 rounded-xl whitespace-nowrap shadow-2xl z-50">
+                {userDisplayName}
+              </div>
+            )}
+          </div>
+
+          {/* User Menu Popover Desktop */}
+          {showUserMenu && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowUserMenu(false)}
+              ></div>
+              <div className="absolute bottom-2 left-16 w-60 bg-[#18181b] border border-[#27272a] rounded-2xl shadow-2xl p-2.5 z-50 text-xs animate-in fade-in slide-in-from-left-2">
+                <div className="px-2.5 py-2 border-b border-[#27272a]">
+                  <p className="font-bold text-[#f4f4f5] truncate">{userDisplayName}</p>
+                  <p className="text-[11px] font-mono text-[#a1a1aa] truncate">{userEmail}</p>
+                </div>
+
+                {/* Cloud Sync Status Info Block */}
+                <div className="p-2 my-2 rounded-xl bg-[#121215] border border-[#27272a]">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-semibold text-[#d4d4d8] flex items-center gap-1.5">
+                      {syncStatus === 'synced' ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      ) : syncStatus === 'saving' || isSyncingManual ? (
+                        <Loader2 className="w-3.5 h-3.5 text-orange-400 animate-spin shrink-0" />
+                      ) : syncStatus === 'offline' ? (
+                        <CloudOff className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                      ) : (
+                        <Terminal className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      )}
+                      {syncStatus === 'synced' && 'Cloud Synced'}
+                      {(syncStatus === 'saving' || isSyncingManual) && 'Saving to Cloud...'}
+                      {syncStatus === 'offline' && 'Offline Mode'}
+                      {syncStatus === 'dev-preview' && 'Dev Preview'}
+                      {syncStatus === 'error' && 'Sync Error'}
+                    </span>
+                    {onTriggerSync && (
+                      <button
+                        onClick={handleManualSyncClick}
+                        disabled={isSyncingManual || syncStatus === 'saving'}
+                        className="text-[10px] text-orange-400 hover:text-orange-300 flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        title="Force sync with cloud"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isSyncingManual ? 'animate-spin' : ''}`} />
+                        Sync
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-[#71717a] leading-tight">
+                    {lastSyncedAt
+                      ? `Last synced: ${lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+                      : 'Multi-device cloud storage active'}
+                  </p>
+                </div>
+                <div className="py-1">
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onSelectView('dashboard');
+                    }}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#27272a] flex items-center gap-2.5 transition-colors cursor-pointer ${
+                      currentView === 'dashboard' ? 'text-orange-400 font-semibold bg-orange-500/10' : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                    }`}
+                  >
+                    <LayoutDashboard className={`w-4 h-4 ${currentView === 'dashboard' ? 'text-orange-400' : 'text-[#71717a]'}`} />
+                    <span>Analytics</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onSelectView('team');
+                    }}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#27272a] flex items-center gap-2.5 transition-colors cursor-pointer ${
+                      currentView === 'team' ? 'text-orange-400 font-semibold bg-orange-500/10' : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                    }`}
+                  >
+                    <Users className={`w-4 h-4 ${currentView === 'team' ? 'text-orange-400' : 'text-[#71717a]'}`} />
+                    <span>Team</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onSelectView('archived');
+                    }}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#27272a] flex items-center gap-2.5 transition-colors cursor-pointer ${
+                      currentView === 'archived' ? 'text-orange-400 font-semibold bg-orange-500/10' : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                    }`}
+                  >
+                    <Archive className={`w-4 h-4 ${currentView === 'archived' ? 'text-orange-400' : 'text-[#71717a]'}`} />
+                    <span>Archived</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onOpenSettings();
+                    }}
+                    className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] flex items-center gap-2.5 transition-colors cursor-pointer"
+                  >
+                    <Settings className="w-4 h-4 text-[#71717a]" />
+                    <span>Preferences & Settings</span>
+                  </button>
+                  {onSignOut && (
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        onSignOut();
+                      }}
+                      className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#27272a] text-red-400 hover:text-red-300 flex items-center gap-2.5 transition-colors mt-1 pt-2 border-t border-[#27272a] cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4 text-red-400" />
+                      <span>Sign Out</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </aside>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#18181b]/95 backdrop-blur-lg border-t border-[#27272a] px-3 py-2 flex items-center justify-around select-none shadow-2xl transition-colors">
+        {navItems.map((item) => {
+          const isActive = currentView === item.view;
+          return (
+            <button
+              key={item.view}
+              onClick={() => onSelectView(item.view)}
+              title={item.label}
+              className={`flex items-center justify-center p-2.5 rounded-xl transition-all relative cursor-pointer ${
+                isActive
+                  ? 'text-orange-500 font-semibold'
+                  : 'text-[#71717a] hover:text-[#a1a1aa]'
+              }`}
+            >
+              <div className={`p-1 rounded-lg transition-transform ${isActive ? 'scale-110 text-orange-500 bg-orange-500/10' : ''}`}>
+                {item.icon}
+              </div>
+              {isActive && (
+                <span className="absolute bottom-1 w-1 h-1 bg-orange-500 rounded-full" />
+              )}
+            </button>
+          );
+        })}
+
+        {/* Profile Avatar Tab on Mobile */}
+        <div className="flex items-center justify-center p-2 relative">
+          <button
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            title="Profile & Settings"
+            className={`flex items-center justify-center p-0.5 rounded-full transition-all cursor-pointer relative ${
+              showUserMenu || currentView === 'dashboard' || currentView === 'team' || currentView === 'archived'
+                ? 'ring-2 ring-orange-500/70'
+                : 'hover:ring-1 hover:ring-white/20'
+            }`}
+          >
+            <img
+              src={userAvatar}
+              alt={userDisplayName}
+              className="w-6 h-6 rounded-full object-cover border border-[#3f3f46]"
+            />
+            <span
+              className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-[#18181b] ${
+                syncStatus === 'synced' ? 'bg-emerald-500' : syncStatus === 'saving' ? 'bg-orange-500' : 'bg-amber-400'
+              }`}
+            />
+          </button>
+
+          {/* User Menu Popover Mobile */}
+          {showUserMenu && (
+            <>
+              <div
+                className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs"
+                onClick={() => setShowUserMenu(false)}
+              ></div>
+              <div className="fixed bottom-16 right-3 w-64 bg-[#18181b] border border-[#27272a] rounded-2xl shadow-2xl p-2.5 z-50 text-xs animate-in fade-in zoom-in-95">
+                <div className="px-2.5 py-2 border-b border-[#27272a]">
+                  <p className="font-bold text-[#f4f4f5] truncate">{userDisplayName}</p>
+                  <p className="text-[11px] font-mono text-[#a1a1aa] truncate">{userEmail}</p>
+                </div>
+
+                {/* Cloud Sync Status Info Block (Mobile) */}
+                <div className="p-2 my-2 rounded-xl bg-[#121215] border border-[#27272a]">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-semibold text-[#d4d4d8] flex items-center gap-1.5">
+                      {syncStatus === 'synced' ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      ) : syncStatus === 'saving' || isSyncingManual ? (
+                        <Loader2 className="w-3.5 h-3.5 text-orange-400 animate-spin shrink-0" />
+                      ) : syncStatus === 'offline' ? (
+                        <CloudOff className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                      ) : (
+                        <Terminal className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      )}
+                      {syncStatus === 'synced' && 'Cloud Synced'}
+                      {(syncStatus === 'saving' || isSyncingManual) && 'Saving to Cloud...'}
+                      {syncStatus === 'offline' && 'Offline Mode'}
+                      {syncStatus === 'dev-preview' && 'Dev Preview'}
+                      {syncStatus === 'error' && 'Sync Error'}
+                    </span>
+                    {onTriggerSync && (
+                      <button
+                        onClick={handleManualSyncClick}
+                        disabled={isSyncingManual || syncStatus === 'saving'}
+                        className="text-[10px] text-orange-400 hover:text-orange-300 flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        title="Force sync with cloud"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isSyncingManual ? 'animate-spin' : ''}`} />
+                        Sync
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-[#71717a] leading-tight">
+                    {lastSyncedAt
+                      ? `Last synced: ${lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+                      : 'Multi-device cloud storage active'}
+                  </p>
+                </div>
+                <div className="py-1">
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onSelectView('dashboard');
+                    }}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#27272a] flex items-center gap-2.5 transition-colors cursor-pointer ${
+                      currentView === 'dashboard' ? 'text-orange-400 font-semibold bg-orange-500/10' : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                    }`}
+                  >
+                    <LayoutDashboard className={`w-4 h-4 ${currentView === 'dashboard' ? 'text-orange-400' : 'text-[#71717a]'}`} />
+                    <span>Analytics</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onSelectView('team');
+                    }}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#27272a] flex items-center gap-2.5 transition-colors cursor-pointer ${
+                      currentView === 'team' ? 'text-orange-400 font-semibold bg-orange-500/10' : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                    }`}
+                  >
+                    <Users className={`w-4 h-4 ${currentView === 'team' ? 'text-orange-400' : 'text-[#71717a]'}`} />
+                    <span>Team</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onSelectView('archived');
+                    }}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#27272a] flex items-center gap-2.5 transition-colors cursor-pointer ${
+                      currentView === 'archived' ? 'text-orange-400 font-semibold bg-orange-500/10' : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                    }`}
+                  >
+                    <Archive className={`w-4 h-4 ${currentView === 'archived' ? 'text-orange-400' : 'text-[#71717a]'}`} />
+                    <span>Archived</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onOpenSettings();
+                    }}
+                    className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] flex items-center gap-2.5 transition-colors cursor-pointer"
+                  >
+                    <Settings className="w-4 h-4 text-[#71717a]" />
+                    <span>Preferences & Settings</span>
+                  </button>
+                  {onSignOut && (
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        onSignOut();
+                      }}
+                      className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#27272a] text-red-400 hover:text-red-300 flex items-center gap-2.5 transition-colors mt-1 pt-2 border-t border-[#27272a] cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4 text-red-400" />
+                      <span>Sign Out</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </nav>
+
+      {/* Floating Active Timer Widget */}
+      {activeTimer && activeItemInfo && (
+        <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-50 flex items-center gap-3.5 bg-[#18181b]/95 backdrop-blur-md border border-orange-500/50 px-4 py-2.5 rounded-2xl shadow-2xl shadow-orange-500/20 text-xs animate-in fade-in slide-in-from-bottom-4">
+          <span className="relative flex h-3 w-3 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-500 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500"></span>
+          </span>
+          <div className="flex flex-col text-left truncate max-w-[160px] sm:max-w-[200px]">
+            <span className="text-[10px] text-orange-400 font-bold uppercase tracking-wider truncate">
+              {activeItemInfo.item.name}
+            </span>
+            <span className="text-xs font-mono font-extrabold text-[#f4f4f5] leading-tight">
+              {formatTimerClock(elapsedSeconds)}
+            </span>
+          </div>
+          <button
+            onClick={onStopTimer}
+            className="bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-xl transition-all flex items-center justify-center shadow-md shrink-0 ml-1 cursor-pointer hover:scale-105 active:scale-95"
+            title="Stop Timer & Log Session"
+          >
+            <Square className="w-3.5 h-3.5 fill-current" />
+          </button>
+        </div>
+      )}
+    </>
+  );
+};
+

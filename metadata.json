@@ -1,0 +1,6 @@
+{
+  "name": "Tracker",
+  "description": "Project management suite with nested task hierarchy, time tracking, Kanban board, timeline, and analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
