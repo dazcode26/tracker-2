@@ -1024,21 +1024,11 @@ function WorkspaceApp() {
             .then((r) => r.json())
             .then((res) => {
               if (res.data) {
-                setAppData(res.data);
-                try {
-                  localStorage.setItem('struktur_app_data', JSON.stringify(res.data));
-                } catch {
-                  // ignore
-                }
+                persistData(res.data);
               }
             })
             .catch(() => {
-              setAppData(initialAppData);
-              try {
-                localStorage.setItem('struktur_app_data', JSON.stringify(initialAppData));
-              } catch {
-                // ignore
-              }
+              persistData(initialAppData);
             });
         }}
       />

@@ -408,7 +408,7 @@ export function useWorkspaceSync(
               _updatedAt: serverTimestamp(),
               _ownerEmail: currentUser.email || null,
             }),
-            15000,
+            25000,
             'Koneksi cloud lambat. Data aman di perangkat.'
           );
 
@@ -455,7 +455,7 @@ export function useWorkspaceSync(
           _updatedAt: serverTimestamp(),
           _ownerEmail: currentUser.email || null,
         }),
-        15000,
+        25000,
         'Waktu habis saat menyimpan data lokal ke cloud.'
       );
 
@@ -568,7 +568,7 @@ export function useWorkspaceSync(
         _updatedAt: serverTimestamp(),
         _ownerEmail: currentUser.email || null,
       }),
-      15000,
+      25000,
       'Waktu habis saat mengunggah data ke cloud.'
     );
 
@@ -591,7 +591,7 @@ export function useWorkspaceSync(
     const workspaceDocRef = doc(db, 'users', currentUser.uid, 'workspace', 'data');
     const snapshot = await withTimeout(
       getDoc(workspaceDocRef),
-      15000,
+      25000,
       'Waktu habis saat mengunduh data dari cloud.'
     );
 

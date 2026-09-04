@@ -23,18 +23,10 @@ googleProvider.setCustomParameters({
   prompt: 'select_account',
 });
 
-// Initialize Firestore with force long-polling for reliable transport in sandboxed iframe environments
+// Initialize Firestore
 const databaseId = firebaseConfigJson.firestoreDatabaseId && firebaseConfigJson.firestoreDatabaseId !== '(default)'
   ? firebaseConfigJson.firestoreDatabaseId
   : undefined;
 
-let firestoreInstance;
-try {
-  firestoreInstance = databaseId
-    ? initializeFirestore(app, { experimentalForceLongPolling: true }, databaseId)
-    : initializeFirestore(app, { experimentalForceLongPolling: true });
-} catch {
-  firestoreInstance = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
-}
+export const db = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
 
-export const db = firestoreInstance;
