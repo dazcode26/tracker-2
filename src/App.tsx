@@ -47,6 +47,11 @@ function WorkspaceApp() {
     isInitialCloudLoaded,
     persistData,
     triggerManualSync,
+    fetchCloudSnapshotInfo,
+    forcePushToCloud,
+    forcePullFromCloud,
+    fetchCloudHistory,
+    restoreCloudSnapshot,
   } = useWorkspaceSync(currentUser, isDevBypass);
 
   const [currentView, setCurrentView] = useState<ViewMode>(() => {
@@ -1005,6 +1010,15 @@ function WorkspaceApp() {
         appData={appData}
         onImportJson={(data) => persistData(data)}
         onUpdateTheme={handleUpdateTheme}
+        currentUser={currentUser}
+        isDevBypass={isDevBypass}
+        syncStatus={syncStatus}
+        lastSyncedAt={lastSyncedAt}
+        fetchCloudSnapshotInfo={fetchCloudSnapshotInfo}
+        forcePushToCloud={forcePushToCloud}
+        forcePullFromCloud={forcePullFromCloud}
+        fetchCloudHistory={fetchCloudHistory}
+        restoreCloudSnapshot={restoreCloudSnapshot}
         onResetDatabase={() => {
           fetch('/api/reset-data', { method: 'POST' })
             .then((r) => r.json())

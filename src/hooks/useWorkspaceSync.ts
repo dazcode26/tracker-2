@@ -1,10 +1,43 @@
 import React, { useState, useEffect, useRef, useCallback, Dispatch, SetStateAction } from 'react';
-import { doc, onSnapshot, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  doc,
+  collection,
+  onSnapshot,
+  setDoc,
+  getDoc,
+  getDocs,
+  query,
+  orderBy,
+  limit,
+  serverTimestamp,
+} from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { AppData, AuthUser, SyncStatus } from '../types';
 import { initialAppData } from '../defaultData';
 
 const LOCAL_STORAGE_DATA_KEY = 'struktur_app_data';
+
+export interface CloudSnapshotInfo {
+  exists: boolean;
+  updatedAt?: string | null;
+  ownerEmail?: string | null;
+  projectsCount?: number;
+  activityLogsCount?: number;
+  lastLogTimestamp?: string | null;
+  lastLogDetails?: string | null;
+  rawJson?: string;
+  userId?: string;
+  error?: string;
+}
+
+export interface CloudHistoryItem {
+  id: string;
+  createdAt: string;
+  projectCount: number;
+  taskCount: number;
+  lastLogDetails?: string;
+  snapshotData?: AppData;
+}
 
 export interface WorkspaceSyncReturn {
   appData: AppData;
@@ -15,6 +48,11 @@ export interface WorkspaceSyncReturn {
   syncError: string | null;
   persistData: (newData: AppData) => void;
   triggerManualSync: () => Promise<void>;
+  fetchCloudSnapshotInfo: () => Promise<CloudSnapshotInfo>;
+  forcePushToCloud: () => Promise<void>;
+  forcePullFromCloud: () => Promise<void>;
+  fetchCloudHistory: () => Promise<CloudHistoryItem[]>;
+  restoreCloudSnapshot: (historyItem: CloudHistoryItem) => Promise<void>;
 }
 
 export function useWorkspaceSync(
@@ -42,6 +80,7 @@ export function useWorkspaceSync(
   );
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [isInitialCloudLoaded, setIsInitialCloudLoaded] = useState<boolean>(false);
+  const isInitialCloudLoadedRef = useRef<boolean>(false);
   const [syncError, setSyncError] = useState<string | null>(null);
 
   // Keep a ref of current appData to avoid stale closure during remote sync
@@ -54,12 +93,44 @@ export function useWorkspaceSync(
   // Debounce ref for Firestore write operations
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isIncomingRemoteUpdateRef = useRef<boolean>(false);
+  const lastHistorySnapshotTimeRef = useRef<number>(0);
+
+  // Helper to count total tasks across all projects
+  const countTotalTasks = (projects: any[]): number => {
+    let count = 0;
+    projects?.forEach((p) => {
+      count += p.items?.length || 0;
+    });
+    return count;
+  };
+
+  // Helper to save a version snapshot to the user's history subcollection
+  const saveCloudSnapshot = useCallback(async (userId: string, data: AppData) => {
+    try {
+      const historyColRef = collection(db, 'users', userId, 'history');
+      const snapshotId = `rev-${Date.now()}`;
+      const docRef = doc(historyColRef, snapshotId);
+      await setDoc(docRef, {
+        id: snapshotId,
+        createdAt: new Date().toISOString(),
+        timestamp: serverTimestamp(),
+        projectCount: data.projects?.length || 0,
+        taskCount: countTotalTasks(data.projects || []),
+        lastLogDetails: data.activityLogs?.[0]?.details || null,
+        data: JSON.parse(JSON.stringify(data)),
+      });
+      lastHistorySnapshotTimeRef.current = Date.now();
+    } catch (e) {
+      console.warn('Failed to save cloud snapshot history:', e);
+    }
+  }, []);
 
   // 1. Setup Cloud Firestore real-time synchronization
   useEffect(() => {
     if (!currentUser || isDevBypass) {
       setSyncStatus(isDevBypass ? 'dev-preview' : 'offline');
       setIsInitialCloudLoaded(true);
+      isInitialCloudLoadedRef.current = true;
       return;
     }
 
@@ -84,17 +155,32 @@ export function useWorkspaceSync(
             // Sanitize JSON to prevent undefined values in Firestore
             const cleanData = JSON.parse(JSON.stringify(dataToMigrate));
 
+            // Ensure parent user document exists with metadata to avoid phantom doc in Firebase Console
+            setDoc(
+              doc(db, 'users', userId),
+              {
+                email: currentUser.email || null,
+                displayName: currentUser.displayName || null,
+                lastActive: serverTimestamp(),
+              },
+              { merge: true }
+            ).catch(() => {});
+
             await setDoc(workspaceDocRef, {
               ...cleanData,
               _updatedAt: serverTimestamp(),
               _ownerEmail: currentUser.email || null,
             });
 
+            // Save initial snapshot to history
+            saveCloudSnapshot(userId, cleanData).catch(() => {});
+
             setAppData(cleanData);
             localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(cleanData));
             setSyncStatus('synced');
             setLastSyncedAt(new Date());
             setIsInitialCloudLoaded(true);
+            isInitialCloudLoadedRef.current = true;
             return;
           }
 
@@ -129,11 +215,13 @@ export function useWorkspaceSync(
             }
           }
           setIsInitialCloudLoaded(true);
+          isInitialCloudLoadedRef.current = true;
         } catch (err: any) {
           console.error('Error handling Firestore snapshot:', err);
           setSyncError(err?.message || 'Failed to sync with cloud');
           setSyncStatus('error');
           setIsInitialCloudLoaded(true);
+          isInitialCloudLoadedRef.current = true;
         }
       },
       (error) => {
@@ -141,6 +229,7 @@ export function useWorkspaceSync(
         setSyncStatus('offline');
         setSyncError(error.message);
         setIsInitialCloudLoaded(true);
+        isInitialCloudLoadedRef.current = true;
       }
     );
 
@@ -150,7 +239,7 @@ export function useWorkspaceSync(
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [currentUser?.uid, isDevBypass]);
+  }, [currentUser?.uid, isDevBypass, saveCloudSnapshot]);
 
   // 2. Persist data: optimistic local update + debounced Firestore push
   const persistData = useCallback(
@@ -182,6 +271,12 @@ export function useWorkspaceSync(
         return;
       }
 
+      // 4b. Guard against pushing stale local cache before cloud snapshot finishes loading
+      if (!isInitialCloudLoadedRef.current) {
+        console.warn('Blocked cloud write: Waiting for initial cloud snapshot first.');
+        return;
+      }
+
       // 5. Debounce push to Firestore (500ms debounce to prevent rapid consecutive writes)
       setSyncStatus('saving');
       if (saveTimeoutRef.current) {
@@ -194,11 +289,26 @@ export function useWorkspaceSync(
           // Clean undefined values before writing to Firestore
           const cleanData = JSON.parse(JSON.stringify(newData));
 
+          setDoc(
+            doc(db, 'users', currentUser.uid),
+            {
+              email: currentUser.email || null,
+              displayName: currentUser.displayName || null,
+              lastActive: serverTimestamp(),
+            },
+            { merge: true }
+          ).catch(() => {});
+
           await setDoc(workspaceDocRef, {
             ...cleanData,
             _updatedAt: serverTimestamp(),
             _ownerEmail: currentUser.email || null,
           });
+
+          // Throttle auto-snapshot to history subcollection (at most once every 5 minutes)
+          if (Date.now() - lastHistorySnapshotTimeRef.current > 5 * 60 * 1000) {
+            saveCloudSnapshot(currentUser.uid, cleanData).catch(() => {});
+          }
 
           setSyncStatus('synced');
           setLastSyncedAt(new Date());
@@ -210,7 +320,7 @@ export function useWorkspaceSync(
         }
       }, 500);
     },
-    [currentUser, isDevBypass]
+    [currentUser, isDevBypass, saveCloudSnapshot]
   );
 
   // 3. Manual Sync / Force Refresh
@@ -251,6 +361,195 @@ export function useWorkspaceSync(
     }
   }, [currentUser, isDevBypass]);
 
+  // 4. Inspect Cloud Document without modifying local state
+  const fetchCloudSnapshotInfo = useCallback(async (): Promise<CloudSnapshotInfo> => {
+    if (!currentUser || isDevBypass) {
+      return {
+        exists: false,
+        error: isDevBypass
+          ? 'Mode Dev Preview / Offline aktif. Data saat ini tidak terhubung ke Firestore Cloud.'
+          : 'Belum login dengan akun Google.',
+      };
+    }
+
+    try {
+      const workspaceDocRef = doc(db, 'users', currentUser.uid, 'workspace', 'data');
+      const snapshot = await getDoc(workspaceDocRef);
+
+      if (!snapshot.exists()) {
+        return {
+          exists: false,
+          userId: currentUser.uid,
+          ownerEmail: currentUser.email || null,
+        };
+      }
+
+      const remoteData = snapshot.data() as any;
+      let updatedAtStr: string | null = null;
+      if (remoteData._updatedAt?.toDate) {
+        updatedAtStr = remoteData._updatedAt.toDate().toLocaleString('id-ID', {
+          dateStyle: 'full',
+          timeStyle: 'medium',
+        });
+      }
+
+      const projectsCount = Array.isArray(remoteData.projects) ? remoteData.projects.length : 0;
+      const activityLogs = Array.isArray(remoteData.activityLogs) ? remoteData.activityLogs : [];
+      const latestLog = activityLogs.length > 0 ? activityLogs[0] : null;
+
+      let lastLogTimestamp: string | null = null;
+      if (latestLog?.timestamp) {
+        try {
+          lastLogTimestamp = new Date(latestLog.timestamp).toLocaleString('id-ID', {
+            dateStyle: 'medium',
+            timeStyle: 'medium',
+          });
+        } catch {
+          lastLogTimestamp = latestLog.timestamp;
+        }
+      }
+
+      return {
+        exists: true,
+        userId: currentUser.uid,
+        ownerEmail: remoteData._ownerEmail || currentUser.email || null,
+        updatedAt: updatedAtStr,
+        projectsCount,
+        activityLogsCount: activityLogs.length,
+        lastLogTimestamp,
+        lastLogDetails: latestLog?.details || null,
+        rawJson: JSON.stringify(remoteData, null, 2),
+      };
+    } catch (err: any) {
+      console.error('Error fetching cloud snapshot info:', err);
+      return {
+        exists: false,
+        userId: currentUser.uid,
+        error: err?.message || 'Gagal membaca dokumen Firestore.',
+      };
+    }
+  }, [currentUser, isDevBypass]);
+
+  // 5. Force Push: upload local state directly to Firestore
+  const forcePushToCloud = useCallback(async () => {
+    if (!currentUser || isDevBypass) {
+      throw new Error('Harap login dengan akun Google untuk push ke cloud.');
+    }
+
+    setSyncStatus('saving');
+    const workspaceDocRef = doc(db, 'users', currentUser.uid, 'workspace', 'data');
+    const cleanData = JSON.parse(JSON.stringify(appDataRef.current));
+
+    setDoc(
+      doc(db, 'users', currentUser.uid),
+      {
+        email: currentUser.email || null,
+        displayName: currentUser.displayName || null,
+        lastActive: serverTimestamp(),
+      },
+      { merge: true }
+    ).catch(() => {});
+
+    await setDoc(workspaceDocRef, {
+      ...cleanData,
+      _updatedAt: serverTimestamp(),
+      _ownerEmail: currentUser.email || null,
+    });
+
+    // Save snapshot to history subcollection
+    saveCloudSnapshot(currentUser.uid, cleanData).catch(() => {});
+
+    setSyncStatus('synced');
+    setLastSyncedAt(new Date());
+    setSyncError(null);
+  }, [currentUser, isDevBypass, saveCloudSnapshot]);
+
+  // 6. Force Pull: overwrite local state with remote Firestore data
+  const forcePullFromCloud = useCallback(async () => {
+    if (!currentUser || isDevBypass) {
+      throw new Error('Harap login dengan akun Google untuk pull dari cloud.');
+    }
+
+    setSyncStatus('saving');
+    const workspaceDocRef = doc(db, 'users', currentUser.uid, 'workspace', 'data');
+    const snapshot = await getDoc(workspaceDocRef);
+
+    if (snapshot.exists()) {
+      const remoteData = snapshot.data() as AppData;
+      if (remoteData && Array.isArray(remoteData.projects)) {
+        setAppData(remoteData);
+        localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(remoteData));
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date());
+        setSyncError(null);
+      }
+    } else {
+      throw new Error('Dokumen workspace di cloud belum ada.');
+    }
+  }, [currentUser, isDevBypass]);
+
+  // 7. Fetch version history snapshots from Firestore subcollection
+  const fetchCloudHistory = useCallback(async (): Promise<CloudHistoryItem[]> => {
+    if (!currentUser || isDevBypass) return [];
+    try {
+      const historyColRef = collection(db, 'users', currentUser.uid, 'history');
+      const q = query(historyColRef, orderBy('createdAt', 'desc'), limit(15));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => {
+        const itemData = d.data();
+        return {
+          id: d.id,
+          createdAt: itemData.createdAt || d.id,
+          projectCount: itemData.projectCount || 0,
+          taskCount: itemData.taskCount || 0,
+          lastLogDetails: itemData.lastLogDetails,
+          snapshotData: itemData.data as AppData,
+        };
+      });
+    } catch (e) {
+      console.warn('Failed to fetch cloud history:', e);
+      return [];
+    }
+  }, [currentUser, isDevBypass]);
+
+  // 8. Restore from a specific snapshot
+  const restoreCloudSnapshot = useCallback(
+    async (historyItem: CloudHistoryItem) => {
+      if (!currentUser || isDevBypass) {
+        throw new Error('Harap login dengan akun Google untuk restore snapshot.');
+      }
+
+      setSyncStatus('saving');
+      let dataToRestore = historyItem.snapshotData;
+      if (!dataToRestore) {
+        const docRef = doc(db, 'users', currentUser.uid, 'history', historyItem.id);
+        const docSnap = await getDoc(docRef);
+        if (!docSnap.exists()) throw new Error('Dokumen riwayat tidak ditemukan');
+        dataToRestore = docSnap.data().data as AppData;
+      }
+
+      if (!dataToRestore || !Array.isArray(dataToRestore.projects)) {
+        throw new Error('Format data riwayat tidak valid.');
+      }
+
+      const cleanRestored = JSON.parse(JSON.stringify(dataToRestore));
+      setAppData(cleanRestored);
+      localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(cleanRestored));
+
+      const workspaceDocRef = doc(db, 'users', currentUser.uid, 'workspace', 'data');
+      await setDoc(workspaceDocRef, {
+        ...cleanRestored,
+        _updatedAt: serverTimestamp(),
+        _ownerEmail: currentUser.email || null,
+      });
+
+      setSyncStatus('synced');
+      setLastSyncedAt(new Date());
+      setSyncError(null);
+    },
+    [currentUser, isDevBypass]
+  );
+
   return {
     appData,
     setAppData,
@@ -260,5 +559,10 @@ export function useWorkspaceSync(
     syncError,
     persistData,
     triggerManualSync,
+    fetchCloudSnapshotInfo,
+    forcePushToCloud,
+    forcePullFromCloud,
+    fetchCloudHistory,
+    restoreCloudSnapshot,
   };
 }

@@ -1,17 +1,29 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   X,
   Download,
   Upload,
   Database,
-  HardDrive,
-  ShieldCheck,
   Palette,
   Sun,
   Moon,
   Check,
+  Cloud,
+  RefreshCw,
+  ExternalLink,
+  Eye,
+  AlertCircle,
+  Copy,
+  CheckCircle2,
+  CloudDownload,
+  CloudUpload,
+  UserCheck,
+  History,
+  RotateCcw,
 } from 'lucide-react';
-import { AppData, AppTheme, AccentColor } from '../types';
+import { AppData, AppTheme, AccentColor, AuthUser, SyncStatus } from '../types';
+import { CloudSnapshotInfo, CloudHistoryItem } from '../hooks/useWorkspaceSync';
+import firebaseConfigJson from '../../firebase-applet-config.json';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -20,6 +32,15 @@ interface SettingsModalProps {
   onImportJson: (json: AppData) => void;
   onResetDatabase?: () => void;
   onUpdateTheme?: (theme: AppTheme, accent: AccentColor) => void;
+  currentUser?: AuthUser | null;
+  isDevBypass?: boolean;
+  syncStatus?: SyncStatus;
+  lastSyncedAt?: Date | null;
+  fetchCloudSnapshotInfo?: () => Promise<CloudSnapshotInfo>;
+  forcePushToCloud?: () => Promise<void>;
+  forcePullFromCloud?: () => Promise<void>;
+  fetchCloudHistory?: () => Promise<CloudHistoryItem[]>;
+  restoreCloudSnapshot?: (historyItem: CloudHistoryItem) => Promise<void>;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -28,8 +49,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   appData,
   onImportJson,
   onUpdateTheme,
+  currentUser,
+  isDevBypass,
+  syncStatus,
+  lastSyncedAt,
+  fetchCloudSnapshotInfo,
+  forcePushToCloud,
+  forcePullFromCloud,
+  fetchCloudHistory,
+  restoreCloudSnapshot,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isInspectingCloud, setIsInspectingCloud] = useState(false);
+  const [cloudInfo, setCloudInfo] = useState<CloudSnapshotInfo | null>(null);
+  const [showRawJson, setShowRawJson] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [historyList, setHistoryList] = useState<CloudHistoryItem[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [showHistorySection, setShowHistorySection] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -43,6 +83,111 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { id: 'purple', label: 'Purple', color: '#8b5cf6', border: 'border-purple-500' },
     { id: 'rose', label: 'Rose', color: '#f43f5e', border: 'border-rose-500' },
   ];
+
+  const handleInspectCloud = async () => {
+    if (!fetchCloudSnapshotInfo) return;
+    setIsInspectingCloud(true);
+    setActionMessage(null);
+    try {
+      const res = await fetchCloudSnapshotInfo();
+      setCloudInfo(res);
+    } catch (err: any) {
+      setActionMessage({ type: 'error', text: err?.message || 'Gagal membaca status cloud.' });
+    } finally {
+      setIsInspectingCloud(false);
+    }
+  };
+
+  const handleForcePush = async () => {
+    if (!forcePushToCloud) return;
+    if (!window.confirm('Yakin ingin menimpa data Cloud Firestore dengan data lokal saat ini?')) return;
+    setIsProcessing(true);
+    setActionMessage(null);
+    try {
+      await forcePushToCloud();
+      setActionMessage({ type: 'success', text: 'Data lokal berhasil diunggah dan disimpan ke Cloud Firestore!' });
+      // Refresh cloud info if previously inspected
+      if (fetchCloudSnapshotInfo) {
+        const res = await fetchCloudSnapshotInfo();
+        setCloudInfo(res);
+      }
+    } catch (err: any) {
+      setActionMessage({ type: 'error', text: err?.message || 'Gagal mengunggah ke cloud.' });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleForcePull = async () => {
+    if (!forcePullFromCloud) return;
+    if (!window.confirm('Yakin ingin mengganti data lokal dengan versi terbaru yang tersimpan di Cloud Firestore?')) return;
+    setIsProcessing(true);
+    setActionMessage(null);
+    try {
+      await forcePullFromCloud();
+      setActionMessage({ type: 'success', text: 'Data Cloud Firestore berhasil ditarik dan menggantikan data lokal!' });
+      setTimeout(() => {
+        onClose();
+      }, 1200);
+    } catch (err: any) {
+      setActionMessage({ type: 'error', text: err?.message || 'Gagal menarik dari cloud.' });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleCopyRawJson = () => {
+    if (!cloudInfo?.rawJson) return;
+    navigator.clipboard.writeText(cloudInfo.rawJson);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const handleFetchHistory = async () => {
+    if (!fetchCloudHistory) return;
+    setIsLoadingHistory(true);
+    setShowHistorySection(true);
+    setActionMessage(null);
+    try {
+      const list = await fetchCloudHistory();
+      setHistoryList(list);
+      if (list.length === 0) {
+        setActionMessage({ type: 'error', text: 'Belum ada riwayat snapshot cloud tersimpan. Snapshot dibuat otomatis saat terjadi perubahan data.' });
+      }
+    } catch (err: any) {
+      setActionMessage({ type: 'error', text: err?.message || 'Gagal memuat riwayat versi dari cloud.' });
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleRestoreItem = async (item: CloudHistoryItem) => {
+    if (!restoreCloudSnapshot) return;
+    const formattedDate = new Date(item.createdAt).toLocaleString('id-ID');
+    if (
+      !window.confirm(
+        `Yakin ingin me-restore workspace ke versi ${formattedDate} (${item.projectCount} project, ${item.taskCount} task)? Data saat ini akan digantikan dengan versi ini.`
+      )
+    ) {
+      return;
+    }
+    setRestoringId(item.id);
+    setActionMessage(null);
+    try {
+      await restoreCloudSnapshot(item);
+      setActionMessage({
+        type: 'success',
+        text: `Workspace berhasil dikembalikan ke versi ${formattedDate}!`,
+      });
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (err: any) {
+      setActionMessage({ type: 'error', text: err?.message || 'Gagal merestore versi data.' });
+    } finally {
+      setRestoringId(null);
+    }
+  };
 
   const handleThemeChange = (newTheme: AppTheme) => {
     if (onUpdateTheme) {
@@ -174,18 +319,305 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
-        {/* System Architecture Info Box */}
-        <div className="bg-[#101010] border border-[#27272a] rounded-xl p-4 text-xs space-y-2">
-          <div className="flex items-center gap-2 text-[#f4f4f5] font-bold">
-            <HardDrive className="w-4 h-4 text-orange-400" /> Single JSON Architecture
+        {/* Cloud Firestore & Multi-Device Sync Diagnostics */}
+        <div className="bg-[#101010] border border-[#27272a] rounded-xl p-4 text-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[#f4f4f5] font-bold">
+              <Cloud className="w-4 h-4 text-orange-400" />
+              <span>Cloud Database (Firestore) & Sync</span>
+            </div>
+            <span
+              className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                syncStatus === 'synced'
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                  : syncStatus === 'saving'
+                  ? 'bg-orange-500/10 text-orange-400 border-orange-500/30'
+                  : isDevBypass
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                  : 'bg-neutral-500/10 text-neutral-400 border-neutral-500/30'
+              }`}
+            >
+              {syncStatus === 'synced'
+                ? 'Synced to Cloud'
+                : syncStatus === 'saving'
+                ? 'Syncing...'
+                : isDevBypass
+                ? 'Dev Mode (Local Storage)'
+                : 'Offline / Disconnected'}
+            </span>
           </div>
-          <p className="text-[#a1a1aa] leading-relaxed">
-            All project trees, recursive sub-items, time sessions, team directory, and active timer
-            states are persisted atomically to <span className="font-mono text-orange-400">data/db.json</span>.
-          </p>
-          <div className="flex items-center gap-2 text-[11px] font-mono text-[#10b981] pt-1">
-            <ShieldCheck className="w-3.5 h-3.5" /> Atomic File Write Enabled
+
+          <div className="text-[#a1a1aa] text-[11px] leading-relaxed space-y-1.5">
+            <div className="flex items-center justify-between gap-1.5 text-[#d4d4d8]">
+              <div className="flex items-center gap-1.5">
+                <UserCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <span>
+                  Akun Aktif:{' '}
+                  <strong className="text-white">
+                    {currentUser?.email || (isDevBypass ? 'Dev Bypass (Lokal)' : 'Belum Login')}
+                  </strong>
+                </span>
+              </div>
+            </div>
+            {currentUser?.uid && !isDevBypass && (
+              <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[#18181b] border border-[#27272a]">
+                <div className="truncate">
+                  <span className="text-[#71717a] block text-[10px]">User ID (UID) Akun Ini:</span>
+                  <span className="font-mono text-[10px] text-orange-400 select-all">{currentUser.uid}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(currentUser.uid);
+                    setActionMessage({ type: 'success', text: 'UID berhasil disalin ke clipboard!' });
+                    setTimeout(() => setActionMessage(null), 2500);
+                  }}
+                  className="px-2 py-1 bg-[#27272a] hover:bg-[#3f3f46] text-white rounded text-[10px] font-medium flex items-center gap-1 shrink-0 cursor-pointer"
+                  title="Salin UID"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>Salin UID</span>
+                </button>
+              </div>
+            )}
+            <p className="text-[#71717a]">
+              Sinkronisasi antar-perangkat (PC dan HP) memerlukan akun Google yang sama di kedua perangkat.
+            </p>
           </div>
+
+          {/* Action Message Banner */}
+          {actionMessage && (
+            <div
+              className={`p-2.5 rounded-lg border text-[11px] flex items-start gap-2 ${
+                actionMessage.type === 'success'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              }`}
+            >
+              {actionMessage.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+              ) : (
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+              )}
+              <span>{actionMessage.text}</span>
+            </div>
+          )}
+
+          {/* Cloud Check & Inspector Button */}
+          <div className="pt-1 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleInspectCloud}
+              disabled={isInspectingCloud}
+              className="flex-1 bg-[#18181b] hover:bg-[#27272a] border border-[#27272a] hover:border-orange-500/40 text-[#f4f4f5] py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5 font-semibold text-[11px] cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-orange-400 ${isInspectingCloud ? 'animate-spin' : ''}`} />
+              <span>{isInspectingCloud ? 'Memeriksa Cloud...' : 'Periksa Versi Data di Cloud'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleFetchHistory}
+              disabled={isLoadingHistory}
+              className="bg-[#18181b] hover:bg-[#27272a] border border-[#27272a] hover:border-purple-500/40 text-[#f4f4f5] py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5 font-semibold text-[11px] cursor-pointer"
+              title="Lihat riwayat snapshot versi yang tersimpan di cloud"
+            >
+              <History className={`w-3.5 h-3.5 text-purple-400 ${isLoadingHistory ? 'animate-spin' : ''}`} />
+              <span>{isLoadingHistory ? 'Memuat Riwayat...' : 'Riwayat Versi Cloud'}</span>
+            </button>
+
+            <a
+              href={`https://console.firebase.google.com/project/${firebaseConfigJson.projectId}/firestore/databases/${firebaseConfigJson.firestoreDatabaseId}/data`}
+              target="_blank"
+              rel="noreferrer"
+              className="bg-[#18181b] hover:bg-[#27272a] border border-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5 font-medium text-[11px]"
+              title="Buka Database di Firebase Console"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Firebase Console</span>
+            </a>
+          </div>
+
+          {/* Cloud Version History Section */}
+          {showHistorySection && (
+            <div className="mt-3 p-3 rounded-xl bg-[#141416] border border-purple-500/30 space-y-2.5 text-[11px]">
+              <div className="flex items-center justify-between border-b border-[#27272a] pb-2">
+                <span className="font-semibold text-white flex items-center gap-1.5">
+                  <History className="w-3.5 h-3.5 text-purple-400" />
+                  Riwayat Snapshot Cloud ({historyList.length} Versi Tersedia):
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowHistorySection(false)}
+                  className="text-[#71717a] hover:text-white text-[10px] cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
+
+              {historyList.length === 0 && !isLoadingHistory && (
+                <p className="text-[#71717a] py-2 text-center text-[11px]">
+                  Belum ada riwayat snapshot cloud tersimpan. Snapshot akan tersimpan otomatis setiap kali ada pembaruan data atau saat 'Kirim ke Cloud' dijalankan.
+                </p>
+              )}
+
+              {historyList.length > 0 && (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {historyList.map((item, idx) => {
+                    const dateFormatted = new Date(item.createdAt).toLocaleString('id-ID', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    });
+                    const isRestoring = restoringId === item.id;
+                    return (
+                      <div
+                        key={item.id}
+                        className="p-2.5 rounded-lg bg-[#18181b] border border-[#27272a] hover:border-[#3f3f46] flex items-center justify-between gap-2"
+                      >
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-white text-[11px] font-semibold">{dateFormatted}</span>
+                            {idx === 0 && (
+                              <span className="bg-purple-500/20 text-purple-300 font-mono text-[9px] px-1.5 py-0.5 rounded">
+                                Snapshot Terbaru
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-[#a1a1aa] flex items-center gap-3">
+                            <span>{item.projectCount} Project</span>
+                            <span>•</span>
+                            <span>{item.taskCount} Task</span>
+                            {item.lastLogDetails && (
+                              <>
+                                <span>•</span>
+                                <span className="truncate max-w-[140px] text-[#71717a]">
+                                  {item.lastLogDetails}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={restoringId !== null}
+                          onClick={() => handleRestoreItem(item)}
+                          className="shrink-0 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 hover:border-purple-500/60 text-purple-300 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                          title="Kembalikan workspace ke versi tanggal ini"
+                        >
+                          <RotateCcw className={`w-3 h-3 ${isRestoring ? 'animate-spin' : ''}`} />
+                          <span>{isRestoring ? 'Memulihkan...' : 'Restore Versi Ini'}</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Cloud Inspection Results */}
+          {cloudInfo && (
+            <div className="mt-3 p-3 rounded-xl bg-[#141416] border border-[#27272a] space-y-2.5 text-[11px]">
+              <div className="flex items-center justify-between border-b border-[#27272a] pb-2">
+                <span className="font-semibold text-white flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-orange-400" />
+                  Status Dokumen Cloud:
+                </span>
+                <span
+                  className={`font-mono px-2 py-0.5 rounded text-[10px] ${
+                    cloudInfo.exists ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                  }`}
+                >
+                  {cloudInfo.exists ? 'DOKUMEN TERSEDIA' : 'BELUM TERSIMPAN'}
+                </span>
+              </div>
+
+              {cloudInfo.error && (
+                <p className="text-amber-400/90 text-[11px]">{cloudInfo.error}</p>
+              )}
+
+              {cloudInfo.exists && (
+                <div className="space-y-1.5 text-[#a1a1aa]">
+                  <div className="flex justify-between">
+                    <span>Terakhir Update di Cloud:</span>
+                    <span className="text-white font-mono">{cloudInfo.updatedAt || 'Tidak ada timestamp'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Jumlah Project di Cloud:</span>
+                    <span className="text-white font-bold">{cloudInfo.projectsCount} Project</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Aktivitas Terakhir di Cloud:</span>
+                    <span className="text-white font-mono">{cloudInfo.lastLogTimestamp || '-'}</span>
+                  </div>
+                  {cloudInfo.lastLogDetails && (
+                    <div className="p-1.5 rounded bg-[#1c1c20] text-[10px] text-[#d4d4d8] truncate">
+                      Detail: "{cloudInfo.lastLogDetails}"
+                    </div>
+                  )}
+
+                  {/* Force Pull & Force Push Options */}
+                  <div className="pt-2 border-t border-[#27272a] grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleForcePull}
+                      disabled={isProcessing}
+                      className="bg-[#18181b] hover:bg-emerald-500/10 border border-[#27272a] hover:border-emerald-500/40 text-emerald-400 p-2 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-all cursor-pointer"
+                      title="Ganti data lokal dengan versi cloud"
+                    >
+                      <CloudDownload className="w-3.5 h-3.5" />
+                      <span>Tarik dari Cloud</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleForcePush}
+                      disabled={isProcessing}
+                      className="bg-[#18181b] hover:bg-orange-500/10 border border-[#27272a] hover:border-orange-500/40 text-orange-400 p-2 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-all cursor-pointer"
+                      title="Timpa data cloud dengan data lokal saat ini"
+                    >
+                      <CloudUpload className="w-3.5 h-3.5" />
+                      <span>Kirim ke Cloud</span>
+                    </button>
+                  </div>
+
+                  {/* Toggle View Raw JSON */}
+                  <div className="pt-1 flex justify-between items-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowRawJson(!showRawJson)}
+                      className="text-orange-400 hover:text-orange-300 text-[10px] font-medium flex items-center gap-1 cursor-pointer"
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>{showRawJson ? 'Sembunyikan Raw JSON' : 'Lihat Raw JSON Cloud'}</span>
+                    </button>
+
+                    {showRawJson && (
+                      <button
+                        type="button"
+                        onClick={handleCopyRawJson}
+                        className="text-[#a1a1aa] hover:text-white text-[10px] flex items-center gap-1 cursor-pointer"
+                      >
+                        {isCopied ? (
+                          <Check className="w-3 h-3 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                        <span>{isCopied ? 'Tersalin' : 'Salin JSON'}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {showRawJson && cloudInfo.rawJson && (
+                    <pre className="mt-2 p-2 bg-[#09090b] border border-[#27272a] rounded-lg text-[10px] font-mono text-[#a1a1aa] max-h-48 overflow-auto whitespace-pre-wrap select-all">
+                      {cloudInfo.rawJson}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Database Backup & Restore Controls */}
