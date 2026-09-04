@@ -91,6 +91,7 @@ export interface AppData {
   persons: Person[];
   projects: ProjectNode[];
   activityLogs: ActivityLog[];
+  _lastModified?: number;
 }
 
 export type ViewMode = 'dashboard' | 'projects' | 'tasks' | 'timeline' | 'calendar' | 'analytics' | 'team' | 'archived';

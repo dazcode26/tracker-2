@@ -148,6 +148,7 @@ export function useWorkspaceSync(
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isIncomingRemoteUpdateRef = useRef<boolean>(false);
   const lastHistorySnapshotTimeRef = useRef<number>(0);
+  const hasUnsyncedLocalChangesRef = useRef<boolean>(false);
 
   // Helper to count total tasks across all projects
   const countTotalTasks = (projects: any[]): number => {
@@ -259,33 +260,39 @@ export function useWorkspaceSync(
               const remoteProjectsJson = JSON.stringify(remoteData.projects);
               const isLocalMatch = remoteProjectsJson === lastSavedProjectsJsonRef.current;
               const hasPendingLocalTimeout = saveTimeoutRef.current !== null;
+              const hasUnsyncedChanges = hasUnsyncedLocalChangesRef.current;
 
-              // If this snapshot is just an echo of our own recent local write or we have pending local changes,
-              // do NOT overwrite local appData to avoid UI flicker or interrupting consecutive edits
-              if (isLocalMatch || hasPendingLocalTimeout) {
-                setSyncStatus('synced');
-                setLastSyncedAt(new Date());
-                setSyncError(null);
+              // If this snapshot is an echo of our local write or we have pending unsynced changes,
+              // do NOT overwrite local appData to avoid losing user edits
+              if (isLocalMatch || hasPendingLocalTimeout || hasUnsyncedChanges) {
+                if (!hasUnsyncedChanges) {
+                  setSyncStatus('synced');
+                  setLastSyncedAt(new Date());
+                  setSyncError(null);
+                }
               } else {
-                // Safeguard against overwriting local work if the local state has newer sessions or logs
+                const localModified = appDataRef.current?._lastModified || 0;
+                const remoteModified = remoteData._lastModified || 0;
                 const localStats = computeDataStats(appDataRef.current);
                 const remoteStats = computeDataStats(remoteData);
 
                 const localHasUnsyncedWork =
+                  localModified > remoteModified ||
                   localStats.sessionCount > remoteStats.sessionCount ||
                   localStats.totalLoggedSeconds > remoteStats.totalLoggedSeconds;
 
-                if (localHasUnsyncedWork && !isInitialCloudLoadedRef.current) {
+                if (localHasUnsyncedWork) {
                   console.info(
-                    `Preserving local workspace: local has ${localStats.sessionCount} sessions (${localStats.totalLoggedSeconds}s) vs remote ${remoteStats.sessionCount} sessions (${remoteStats.totalLoggedSeconds}s). Re-syncing local to cloud.`
+                    `Preserving local workspace: local (mod: ${localModified}, ${localStats.sessionCount} sessions) vs remote (mod: ${remoteModified}, ${remoteStats.sessionCount} sessions). Re-syncing local to cloud.`
                   );
                   // Retain local state and push to cloud to heal remote document
                   setSyncStatus('saving');
+                  hasUnsyncedLocalChangesRef.current = true;
                   setTimeout(() => {
                     if (appDataRef.current) {
                       persistData(appDataRef.current);
                     }
-                  }, 600);
+                  }, 400);
                 } else {
                   isIncomingRemoteUpdateRef.current = true;
                   setAppData(remoteData);
@@ -329,16 +336,21 @@ export function useWorkspaceSync(
   // 2. Persist data: optimistic local update + debounced Firestore push
   const persistData = useCallback(
     (newData: AppData, options?: { localOnly?: boolean }) => {
-      // 1. Immediate optimistic UI update
-      setAppData(newData);
-      appDataRef.current = newData;
+      // 1. Immediate optimistic UI update with timestamp
+      const stampedData: AppData = {
+        ...newData,
+        _lastModified: Date.now(),
+      };
+
+      setAppData(stampedData);
+      appDataRef.current = stampedData;
       try {
-        lastSavedProjectsJsonRef.current = JSON.stringify(newData.projects);
+        lastSavedProjectsJsonRef.current = JSON.stringify(stampedData.projects);
       } catch {}
 
       // 2. Persist to localStorage immediately for instant offline safety
       try {
-        localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(newData));
+        localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(stampedData));
       } catch (err) {
         console.warn('LocalStorage quota warning:', err);
       }
@@ -352,7 +364,7 @@ export function useWorkspaceSync(
       fetch('/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newData),
+        body: JSON.stringify(stampedData),
       }).catch(() => {});
 
       // 4. In dev bypass mode, local persistence is sufficient
@@ -369,6 +381,7 @@ export function useWorkspaceSync(
 
       // 5. Debounce push to Firestore (500ms debounce to prevent rapid consecutive writes)
       setSyncStatus('saving');
+      hasUnsyncedLocalChangesRef.current = true;
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
@@ -377,7 +390,7 @@ export function useWorkspaceSync(
         try {
           const workspaceDocRef = doc(db, 'users', currentUser.uid, 'workspace', 'data');
           // Clean undefined values before writing to Firestore
-          const cleanData = JSON.parse(JSON.stringify(newData));
+          const cleanData = JSON.parse(JSON.stringify(stampedData));
 
           setDoc(
             doc(db, 'users', currentUser.uid),
@@ -395,7 +408,7 @@ export function useWorkspaceSync(
               _updatedAt: serverTimestamp(),
               _ownerEmail: currentUser.email || null,
             }),
-            8000,
+            15000,
             'Koneksi cloud lambat. Data aman di perangkat.'
           );
 
@@ -405,12 +418,14 @@ export function useWorkspaceSync(
           }
 
           saveTimeoutRef.current = null;
+          hasUnsyncedLocalChangesRef.current = false;
           setSyncStatus('synced');
           setLastSyncedAt(new Date());
           setSyncError(null);
         } catch (err: any) {
           saveTimeoutRef.current = null;
           console.error('Failed to sync changes to Firestore:', err);
+          hasUnsyncedLocalChangesRef.current = true;
           setSyncStatus('offline');
           setSyncError(err?.message || 'Koneksi cloud lambat. Data aman di penyimpanan lokal.');
         }
@@ -429,57 +444,34 @@ export function useWorkspaceSync(
     try {
       setSyncStatus('saving');
       const workspaceDocRef = doc(db, 'users', currentUser.uid, 'workspace', 'data');
-      const snapshot = await withTimeout(
-        getDoc(workspaceDocRef),
-        8000,
-        'Waktu habis saat menghubungi cloud.'
+
+      // User clicked sync to ensure their latest local changes are pushed and stored in cloud
+      const currentData = appDataRef.current;
+      const cleanData = JSON.parse(JSON.stringify(currentData));
+
+      await withTimeout(
+        setDoc(workspaceDocRef, {
+          ...cleanData,
+          _updatedAt: serverTimestamp(),
+          _ownerEmail: currentUser.email || null,
+        }),
+        15000,
+        'Waktu habis saat menyimpan data lokal ke cloud.'
       );
 
-      if (snapshot.exists()) {
-        const remoteData = snapshot.data() as AppData;
-        if (remoteData && Array.isArray(remoteData.projects)) {
-          // Compare data richness
-          const localStats = computeDataStats(appDataRef.current);
-          const remoteStats = computeDataStats(remoteData);
-          if (localStats.sessionCount > remoteStats.sessionCount || localStats.totalLoggedSeconds > remoteStats.totalLoggedSeconds) {
-            // Push local to remote
-            await withTimeout(
-              setDoc(workspaceDocRef, {
-                ...JSON.parse(JSON.stringify(appDataRef.current)),
-                _updatedAt: serverTimestamp(),
-                _ownerEmail: currentUser.email || null,
-              }),
-              8000,
-              'Waktu habis saat mengunggah data lokal ke cloud.'
-            );
-          } else {
-            setAppData(remoteData);
-            localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(remoteData));
-          }
-        }
-      } else {
-        // Upload current state if not found
-        const cleanData = JSON.parse(JSON.stringify(appDataRef.current));
-        await withTimeout(
-          setDoc(workspaceDocRef, {
-            ...cleanData,
-            _updatedAt: serverTimestamp(),
-            _ownerEmail: currentUser.email || null,
-          }),
-          8000,
-          'Waktu habis saat mengunggah data baru ke cloud.'
-        );
-      }
+      saveCloudSnapshot(currentUser.uid, cleanData).catch(() => {});
 
+      hasUnsyncedLocalChangesRef.current = false;
       setSyncStatus('synced');
       setLastSyncedAt(new Date());
       setSyncError(null);
     } catch (err: any) {
       console.error('Manual sync failed:', err);
+      hasUnsyncedLocalChangesRef.current = true;
       setSyncStatus('offline');
       setSyncError(err?.message || 'Manual sync failed (koneksi lambat)');
     }
-  }, [currentUser, isDevBypass]);
+  }, [currentUser, isDevBypass, saveCloudSnapshot]);
 
   // 4. Inspect Cloud Document without modifying local state
   const fetchCloudSnapshotInfo = useCallback(async (): Promise<CloudSnapshotInfo> => {
@@ -576,13 +568,14 @@ export function useWorkspaceSync(
         _updatedAt: serverTimestamp(),
         _ownerEmail: currentUser.email || null,
       }),
-      8000,
+      15000,
       'Waktu habis saat mengunggah data ke cloud.'
     );
 
     // Save snapshot to history subcollection
     saveCloudSnapshot(currentUser.uid, cleanData).catch(() => {});
 
+    hasUnsyncedLocalChangesRef.current = false;
     setSyncStatus('synced');
     setLastSyncedAt(new Date());
     setSyncError(null);
@@ -598,13 +591,14 @@ export function useWorkspaceSync(
     const workspaceDocRef = doc(db, 'users', currentUser.uid, 'workspace', 'data');
     const snapshot = await withTimeout(
       getDoc(workspaceDocRef),
-      8000,
+      15000,
       'Waktu habis saat mengunduh data dari cloud.'
     );
 
     if (snapshot.exists()) {
       const remoteData = snapshot.data() as AppData;
       if (remoteData && Array.isArray(remoteData.projects)) {
+        hasUnsyncedLocalChangesRef.current = false;
         setAppData(remoteData);
         localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(remoteData));
         setSyncStatus('synced');
