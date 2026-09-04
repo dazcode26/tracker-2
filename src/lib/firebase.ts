@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, getFirestore } from 'firebase/firestore';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 
 // In Vite, client env vars can be injected or fallback to the provided firebase config json
@@ -23,8 +23,18 @@ googleProvider.setCustomParameters({
   prompt: 'select_account',
 });
 
-// Initialize Firestore
-// Use firestoreDatabaseId if configured in project, otherwise default instance
-export const db = firebaseConfigJson.firestoreDatabaseId && firebaseConfigJson.firestoreDatabaseId !== '(default)'
-  ? getFirestore(app, firebaseConfigJson.firestoreDatabaseId)
-  : getFirestore(app);
+// Initialize Firestore with long-polling fallback for robust streaming in sandboxed iframe environments
+const databaseId = firebaseConfigJson.firestoreDatabaseId && firebaseConfigJson.firestoreDatabaseId !== '(default)'
+  ? firebaseConfigJson.firestoreDatabaseId
+  : undefined;
+
+let firestoreInstance;
+try {
+  firestoreInstance = databaseId
+    ? initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, databaseId)
+    : initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+} catch {
+  firestoreInstance = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
+}
+
+export const db = firestoreInstance;

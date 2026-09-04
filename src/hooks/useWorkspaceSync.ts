@@ -13,10 +13,63 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { AppData, AuthUser, SyncStatus } from '../types';
+import { AppData, AuthUser, SyncStatus, ItemNode } from '../types';
 import { initialAppData } from '../defaultData';
 
 const LOCAL_STORAGE_DATA_KEY = 'struktur_app_data';
+
+// Helper to enforce maximum wait time for network write/read operations
+function withTimeout<T>(promise: Promise<T>, ms: number, fallbackMessage: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(fallbackMessage));
+    }, ms);
+
+    promise
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+// Compute statistics to compare data richness and prevent stale cloud overwrite
+interface DataStats {
+  sessionCount: number;
+  totalLoggedSeconds: number;
+  itemCount: number;
+  logCount: number;
+}
+
+function computeDataStats(data: AppData | null | undefined): DataStats {
+  if (!data) return { sessionCount: 0, totalLoggedSeconds: 0, itemCount: 0, logCount: 0 };
+  let sessionCount = 0;
+  let totalLoggedSeconds = 0;
+  let itemCount = 0;
+  const countNode = (node: ItemNode) => {
+    itemCount++;
+    if (Array.isArray(node.sessions)) {
+      sessionCount += node.sessions.length;
+      for (const s of node.sessions) {
+        totalLoggedSeconds += s.loggedSeconds || 0;
+      }
+    }
+    if (Array.isArray(node.subItems)) {
+      node.subItems.forEach(countNode);
+    }
+  };
+  (data.projects || []).forEach((p) => (p.items || []).forEach(countNode));
+  return {
+    sessionCount,
+    totalLoggedSeconds,
+    itemCount,
+    logCount: Array.isArray(data.activityLogs) ? data.activityLogs.length : 0,
+  };
+}
 
 export interface CloudSnapshotInfo {
   exists: boolean;
@@ -214,14 +267,35 @@ export function useWorkspaceSync(
                 setLastSyncedAt(new Date());
                 setSyncError(null);
               } else {
-                isIncomingRemoteUpdateRef.current = true;
-                setAppData(remoteData);
-                try {
-                  localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(remoteData));
-                } catch {}
-                setSyncStatus('synced');
-                setLastSyncedAt(new Date());
-                setSyncError(null);
+                // Safeguard against overwriting local work if the local state has newer sessions or logs
+                const localStats = computeDataStats(appDataRef.current);
+                const remoteStats = computeDataStats(remoteData);
+
+                const localHasUnsyncedWork =
+                  localStats.sessionCount > remoteStats.sessionCount ||
+                  localStats.totalLoggedSeconds > remoteStats.totalLoggedSeconds;
+
+                if (localHasUnsyncedWork && !isInitialCloudLoadedRef.current) {
+                  console.info(
+                    `Preserving local workspace: local has ${localStats.sessionCount} sessions (${localStats.totalLoggedSeconds}s) vs remote ${remoteStats.sessionCount} sessions (${remoteStats.totalLoggedSeconds}s). Re-syncing local to cloud.`
+                  );
+                  // Retain local state and push to cloud to heal remote document
+                  setSyncStatus('saving');
+                  setTimeout(() => {
+                    if (appDataRef.current) {
+                      persistData(appDataRef.current);
+                    }
+                  }, 600);
+                } else {
+                  isIncomingRemoteUpdateRef.current = true;
+                  setAppData(remoteData);
+                  try {
+                    localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(remoteData));
+                  } catch {}
+                  setSyncStatus('synced');
+                  setLastSyncedAt(new Date());
+                  setSyncError(null);
+                }
               }
             }
           }
@@ -230,7 +304,7 @@ export function useWorkspaceSync(
         } catch (err: any) {
           console.error('Error handling Firestore snapshot:', err);
           setSyncError(err?.message || 'Failed to sync with cloud');
-          setSyncStatus('error');
+          setSyncStatus('offline');
           setIsInitialCloudLoaded(true);
           isInitialCloudLoadedRef.current = true;
         }
@@ -315,11 +389,15 @@ export function useWorkspaceSync(
             { merge: true }
           ).catch(() => {});
 
-          await setDoc(workspaceDocRef, {
-            ...cleanData,
-            _updatedAt: serverTimestamp(),
-            _ownerEmail: currentUser.email || null,
-          });
+          await withTimeout(
+            setDoc(workspaceDocRef, {
+              ...cleanData,
+              _updatedAt: serverTimestamp(),
+              _ownerEmail: currentUser.email || null,
+            }),
+            8000,
+            'Koneksi cloud lambat. Data aman di perangkat.'
+          );
 
           // Throttle auto-snapshot to history subcollection (at most once every 5 minutes)
           if (Date.now() - lastHistorySnapshotTimeRef.current > 5 * 60 * 1000) {
@@ -334,7 +412,7 @@ export function useWorkspaceSync(
           saveTimeoutRef.current = null;
           console.error('Failed to sync changes to Firestore:', err);
           setSyncStatus('offline');
-          setSyncError(err?.message || 'Sync failed');
+          setSyncError(err?.message || 'Koneksi cloud lambat. Data aman di penyimpanan lokal.');
         }
       }, 500);
     },
@@ -351,22 +429,46 @@ export function useWorkspaceSync(
     try {
       setSyncStatus('saving');
       const workspaceDocRef = doc(db, 'users', currentUser.uid, 'workspace', 'data');
-      const snapshot = await getDoc(workspaceDocRef);
+      const snapshot = await withTimeout(
+        getDoc(workspaceDocRef),
+        8000,
+        'Waktu habis saat menghubungi cloud.'
+      );
 
       if (snapshot.exists()) {
         const remoteData = snapshot.data() as AppData;
         if (remoteData && Array.isArray(remoteData.projects)) {
-          setAppData(remoteData);
-          localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(remoteData));
+          // Compare data richness
+          const localStats = computeDataStats(appDataRef.current);
+          const remoteStats = computeDataStats(remoteData);
+          if (localStats.sessionCount > remoteStats.sessionCount || localStats.totalLoggedSeconds > remoteStats.totalLoggedSeconds) {
+            // Push local to remote
+            await withTimeout(
+              setDoc(workspaceDocRef, {
+                ...JSON.parse(JSON.stringify(appDataRef.current)),
+                _updatedAt: serverTimestamp(),
+                _ownerEmail: currentUser.email || null,
+              }),
+              8000,
+              'Waktu habis saat mengunggah data lokal ke cloud.'
+            );
+          } else {
+            setAppData(remoteData);
+            localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(remoteData));
+          }
         }
       } else {
         // Upload current state if not found
         const cleanData = JSON.parse(JSON.stringify(appDataRef.current));
-        await setDoc(workspaceDocRef, {
-          ...cleanData,
-          _updatedAt: serverTimestamp(),
-          _ownerEmail: currentUser.email || null,
-        });
+        await withTimeout(
+          setDoc(workspaceDocRef, {
+            ...cleanData,
+            _updatedAt: serverTimestamp(),
+            _ownerEmail: currentUser.email || null,
+          }),
+          8000,
+          'Waktu habis saat mengunggah data baru ke cloud.'
+        );
       }
 
       setSyncStatus('synced');
@@ -374,8 +476,8 @@ export function useWorkspaceSync(
       setSyncError(null);
     } catch (err: any) {
       console.error('Manual sync failed:', err);
-      setSyncStatus('error');
-      setSyncError(err?.message || 'Manual sync failed');
+      setSyncStatus('offline');
+      setSyncError(err?.message || 'Manual sync failed (koneksi lambat)');
     }
   }, [currentUser, isDevBypass]);
 
@@ -468,11 +570,15 @@ export function useWorkspaceSync(
       { merge: true }
     ).catch(() => {});
 
-    await setDoc(workspaceDocRef, {
-      ...cleanData,
-      _updatedAt: serverTimestamp(),
-      _ownerEmail: currentUser.email || null,
-    });
+    await withTimeout(
+      setDoc(workspaceDocRef, {
+        ...cleanData,
+        _updatedAt: serverTimestamp(),
+        _ownerEmail: currentUser.email || null,
+      }),
+      8000,
+      'Waktu habis saat mengunggah data ke cloud.'
+    );
 
     // Save snapshot to history subcollection
     saveCloudSnapshot(currentUser.uid, cleanData).catch(() => {});
@@ -490,7 +596,11 @@ export function useWorkspaceSync(
 
     setSyncStatus('saving');
     const workspaceDocRef = doc(db, 'users', currentUser.uid, 'workspace', 'data');
-    const snapshot = await getDoc(workspaceDocRef);
+    const snapshot = await withTimeout(
+      getDoc(workspaceDocRef),
+      8000,
+      'Waktu habis saat mengunduh data dari cloud.'
+    );
 
     if (snapshot.exists()) {
       const remoteData = snapshot.data() as AppData;
