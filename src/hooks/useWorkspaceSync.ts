@@ -6,6 +6,7 @@ import {
   setDoc,
   getDoc,
   getDocs,
+  deleteDoc,
   query,
   orderBy,
   limit,
@@ -46,7 +47,7 @@ export interface WorkspaceSyncReturn {
   lastSyncedAt: Date | null;
   isInitialCloudLoaded: boolean;
   syncError: string | null;
-  persistData: (newData: AppData) => void;
+  persistData: (newData: AppData, options?: { localOnly?: boolean }) => void;
   triggerManualSync: () => Promise<void>;
   fetchCloudSnapshotInfo: () => Promise<CloudSnapshotInfo>;
   forcePushToCloud: () => Promise<void>;
@@ -104,7 +105,7 @@ export function useWorkspaceSync(
     return count;
   };
 
-  // Helper to save a version snapshot to the user's history subcollection
+  // Helper to save a version snapshot to the user's history subcollection (capped at latest 5 snapshots)
   const saveCloudSnapshot = useCallback(async (userId: string, data: AppData) => {
     try {
       const historyColRef = collection(db, 'users', userId, 'history');
@@ -120,6 +121,16 @@ export function useWorkspaceSync(
         data: JSON.parse(JSON.stringify(data)),
       });
       lastHistorySnapshotTimeRef.current = Date.now();
+
+      // Automatically prune snapshots older than the latest 5 to keep storage tidy
+      const q = query(historyColRef, orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      if (snap.docs.length > 5) {
+        const excessDocs = snap.docs.slice(5);
+        for (const excessDoc of excessDocs) {
+          await deleteDoc(excessDoc.ref).catch(() => {});
+        }
+      }
     } catch (e) {
       console.warn('Failed to save cloud snapshot history:', e);
     }
@@ -243,7 +254,7 @@ export function useWorkspaceSync(
 
   // 2. Persist data: optimistic local update + debounced Firestore push
   const persistData = useCallback(
-    (newData: AppData) => {
+    (newData: AppData, options?: { localOnly?: boolean }) => {
       // 1. Immediate optimistic UI update
       setAppData(newData);
       appDataRef.current = newData;
@@ -256,6 +267,11 @@ export function useWorkspaceSync(
         localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(newData));
       } catch (err) {
         console.warn('LocalStorage quota warning:', err);
+      }
+
+      // If local-only change (e.g. tree expand/collapse UI state), skip server/cloud write
+      if (options?.localOnly) {
+        return;
       }
 
       // 3. Fallback to local server API if running in container dev
@@ -310,10 +326,12 @@ export function useWorkspaceSync(
             saveCloudSnapshot(currentUser.uid, cleanData).catch(() => {});
           }
 
+          saveTimeoutRef.current = null;
           setSyncStatus('synced');
           setLastSyncedAt(new Date());
           setSyncError(null);
         } catch (err: any) {
+          saveTimeoutRef.current = null;
           console.error('Failed to sync changes to Firestore:', err);
           setSyncStatus('offline');
           setSyncError(err?.message || 'Sync failed');
@@ -493,7 +511,7 @@ export function useWorkspaceSync(
     if (!currentUser || isDevBypass) return [];
     try {
       const historyColRef = collection(db, 'users', currentUser.uid, 'history');
-      const q = query(historyColRef, orderBy('createdAt', 'desc'), limit(15));
+      const q = query(historyColRef, orderBy('createdAt', 'desc'), limit(5));
       const snap = await getDocs(q);
       return snap.docs.map((d) => {
         const itemData = d.data();

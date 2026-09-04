@@ -630,24 +630,24 @@ function WorkspaceApp() {
     }
   };
 
-  // Toggle item expanded state and persist
+  // Toggle item expanded state (local-only, preserves instantly without cloud sync spam)
   const handleToggleItemExpand = (itemId: string) => {
     const updatedProjects = toggleItemExpandInProjects(appData.projects, itemId);
     const updatedData: AppData = {
       ...appData,
       projects: updatedProjects,
     };
-    persistData(updatedData);
+    persistData(updatedData, { localOnly: true });
   };
 
-  // Expand or Collapse all items
+  // Expand or Collapse all items (local-only)
   const handleSetAllExpand = (expand: boolean) => {
     const updatedProjects = setAllExpandInProjects(appData.projects, expand);
     const updatedData: AppData = {
       ...appData,
       projects: updatedProjects,
     };
-    persistData(updatedData);
+    persistData(updatedData, { localOnly: true });
   };
 
   // Project Handlers

@@ -444,7 +444,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center justify-between border-b border-[#27272a] pb-2">
                 <span className="font-semibold text-white flex items-center gap-1.5">
                   <History className="w-3.5 h-3.5 text-purple-400" />
-                  Riwayat Snapshot Cloud ({historyList.length} Versi Tersedia):
+                  Riwayat Snapshot Cloud ({historyList.length} dari maks. 5 versi tersimpan):
                 </span>
                 <button
                   type="button"
