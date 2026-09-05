@@ -54,6 +54,7 @@ export const initialAppData: AppData = {
       title: 'Digital Literacy Video',
       status: 'active',
       color: '#e4e4e7',
+      description: 'Nested work packages and task hierarchy. Parent items automatically calculate completion rollups from all subordinate sub-items.',
       actualStartDate: '2026-08-01T08:00:00.000Z',
       actualEndDate: '2026-08-20T17:00:00.000Z',
       items: [

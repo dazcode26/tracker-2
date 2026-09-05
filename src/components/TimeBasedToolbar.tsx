@@ -97,36 +97,51 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
     setPickerDate(new Date(currentDate));
   }, [currentDate, isDatePickerOpen]);
 
-  // Click outside listener
+  // Click outside listener & Escape key handler
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: Event) => {
+      const target = event.target as Node;
       if (
         projectFilterRef.current &&
-        !projectFilterRef.current.contains(event.target as Node)
+        !projectFilterRef.current.contains(target)
       ) {
         setIsProjectFilterOpen(false);
       }
       if (
         personFilterRef.current &&
-        !personFilterRef.current.contains(event.target as Node)
+        !personFilterRef.current.contains(target)
       ) {
         setIsPersonFilterOpen(false);
       }
       if (
         viewDropdownRef.current &&
-        !viewDropdownRef.current.contains(event.target as Node)
+        !viewDropdownRef.current.contains(target)
       ) {
         setIsViewDropdownOpen(false);
       }
       if (
         datePickerRef.current &&
-        !datePickerRef.current.contains(event.target as Node)
+        !datePickerRef.current.contains(target)
       ) {
         setIsDatePickerOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsProjectFilterOpen(false);
+        setIsPersonFilterOpen(false);
+        setIsViewDropdownOpen(false);
+        setIsDatePickerOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   const handleCloseMobileSearch = () => {
@@ -343,7 +358,12 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
           </button>
 
           {isProjectFilterOpen && (
-            <div className="absolute left-0 mt-1.5 w-56 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1 z-50 flex flex-col gap-0.5 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setIsProjectFilterOpen(false)}
+              />
+              <div className="absolute left-0 mt-1.5 w-56 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1 z-50 flex flex-col gap-0.5 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
               <button
                 type="button"
                 onClick={() => {
@@ -384,6 +404,7 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
                 </button>
               ))}
             </div>
+            </>
           )}
         </div>
 
@@ -424,7 +445,12 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
             </button>
 
             {isPersonFilterOpen && (
-              <div className="absolute left-0 mt-1.5 w-60 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1 z-50 flex flex-col gap-0.5 max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsPersonFilterOpen(false)}
+                />
+                <div className="absolute left-0 mt-1.5 w-60 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1 z-50 flex flex-col gap-0.5 max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
                 <button
                   type="button"
                   onClick={() => {
@@ -479,6 +505,7 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
                   </button>
                 ))}
               </div>
+              </>
             )}
           </div>
         )}
@@ -547,7 +574,12 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
 
           {/* Date Picker Popover */}
           {isDatePickerOpen && (
-            <div className="absolute right-0 sm:right-auto sm:left-0 mt-1.5 w-64 bg-[#18181b] border border-[#27272a] rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 duration-100 space-y-3">
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setIsDatePickerOpen(false)}
+              />
+              <div className="absolute right-0 sm:right-auto sm:left-0 mt-1.5 w-64 bg-[#18181b] border border-[#27272a] rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 duration-100 space-y-3">
               {/* Header: Month/Year navigation */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-[#f4f4f5]">
@@ -607,6 +639,7 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
                 </button>
               </div>
             </div>
+            </>
           )}
         </div>
 
@@ -643,7 +676,12 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
           </button>
 
           {isViewDropdownOpen && (
-            <div className="absolute right-0 mt-1.5 w-44 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100">
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setIsViewDropdownOpen(false)}
+              />
+              <div className="absolute right-0 mt-1.5 w-44 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100">
               {timeScaleModes.map((mode) => (
                 <button
                   key={mode.id}
@@ -663,6 +701,7 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
                 </button>
               ))}
             </div>
+            </>
           )}
         </div>
       </div>

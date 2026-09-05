@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   ListTree,
+  Table2,
   Kanban,
   SquareChartGantt,
   CalendarDays,
@@ -16,6 +17,8 @@ import {
   Moon,
   Cloud,
   CloudOff,
+  CloudUpload,
+  CloudDownload,
   CheckCircle2,
   RefreshCw,
   Loader2,
@@ -36,6 +39,7 @@ interface HeaderProps {
   syncStatus?: SyncStatus;
   lastSyncedAt?: Date | null;
   onTriggerSync?: () => Promise<void>;
+  onPullFromCloud?: () => Promise<void>;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -50,20 +54,52 @@ export const Header: React.FC<HeaderProps> = ({
   syncStatus = 'synced',
   lastSyncedAt = null,
   onTriggerSync,
+  onPullFromCloud,
 }) => {
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [showUserMenu, setShowUserMenu] = useState<boolean>(false);
   const [isSyncingManual, setIsSyncingManual] = useState<boolean>(false);
+  const [isPullingManual, setIsPullingManual] = useState<boolean>(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
   const handleManualSyncClick = async () => {
-    if (!onTriggerSync || isSyncingManual) return;
+    if (!onTriggerSync || isSyncingManual || isPullingManual) return;
     try {
       setIsSyncingManual(true);
+      setSyncFeedback(null);
       await onTriggerSync();
-    } catch (e) {
+      setSyncFeedback('Data berhasil diupload ke cloud!');
+      setTimeout(() => setSyncFeedback(null), 3000);
+    } catch (e: any) {
       console.warn('Manual sync failed:', e);
+      setSyncFeedback(e?.message || 'Gagal sinkronisasi');
+      setTimeout(() => setSyncFeedback(null), 4000);
     } finally {
       setIsSyncingManual(false);
+    }
+  };
+
+  const handleManualPullClick = async () => {
+    if (!onPullFromCloud || isPullingManual || isSyncingManual) return;
+    if (
+      !window.confirm(
+        'Muat data dari Cloud? Data lokal Anda saat ini akan digantikan dengan data yang tersimpan di Cloud Firestore.'
+      )
+    ) {
+      return;
+    }
+    try {
+      setIsPullingManual(true);
+      setSyncFeedback(null);
+      await onPullFromCloud();
+      setSyncFeedback('Data dari cloud berhasil dimuat!');
+      setTimeout(() => setSyncFeedback(null), 3000);
+    } catch (e: any) {
+      console.warn('Manual pull failed:', e);
+      setSyncFeedback(e?.message || 'Gagal memuat data dari cloud');
+      setTimeout(() => setSyncFeedback(null), 4000);
+    } finally {
+      setIsPullingManual(false);
     }
   };
 
@@ -104,6 +140,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const navItems: { view: ViewMode; label: string; icon: React.ReactNode }[] = [
     { view: 'projects', label: 'Tree', icon: <ListTree className="w-5 h-5 shrink-0" /> },
+    { view: 'notion', label: 'Notion', icon: <Table2 className="w-5 h-5 shrink-0" /> },
     { view: 'tasks', label: 'Kanban', icon: <Kanban className="w-5 h-5 shrink-0" /> },
     { view: 'timeline', label: 'Timeline', icon: <SquareChartGantt className="w-5 h-5 shrink-0" /> },
     { view: 'calendar', label: 'Calendar', icon: <CalendarDays className="w-5 h-5 shrink-0" /> },
@@ -154,14 +191,16 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="relative group w-full flex justify-center">
             <button
               onClick={handleManualSyncClick}
-              disabled={isSyncingManual || syncStatus === 'saving'}
+              disabled={isSyncingManual || isPullingManual}
               className="flex items-center justify-center w-10 h-10 rounded-xl text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#18181b] transition-all cursor-pointer relative"
-              title="Cloud Sync Status"
+              title="Manual Sync (Klik untuk Upload ke Cloud)"
             >
-              {syncStatus === 'saving' || isSyncingManual ? (
+              {isSyncingManual || syncStatus === 'saving' || isPullingManual ? (
                 <Loader2 className="w-4 h-4 text-orange-400 animate-spin" />
               ) : syncStatus === 'synced' ? (
                 <Cloud className="w-4 h-4 text-emerald-400" />
+              ) : syncStatus === 'unsynced' ? (
+                <Cloud className="w-4 h-4 text-amber-400" />
               ) : syncStatus === 'offline' ? (
                 <CloudOff className="w-4 h-4 text-neutral-400" />
               ) : (
@@ -172,22 +211,32 @@ export const Header: React.FC<HeaderProps> = ({
                 className={`absolute top-2 right-2 w-1.5 h-1.5 rounded-full ${
                   syncStatus === 'synced'
                     ? 'bg-emerald-500'
-                    : syncStatus === 'saving' || isSyncingManual
+                    : isSyncingManual || syncStatus === 'saving' || isPullingManual
                     ? 'bg-orange-500 animate-ping'
+                    : syncStatus === 'unsynced'
+                    ? 'bg-amber-400 animate-pulse'
                     : syncStatus === 'offline'
                     ? 'bg-neutral-500'
-                    : 'bg-amber-400'
+                    : 'bg-red-400'
                 }`}
               />
             </button>
 
             {/* Hover Tooltip for Cloud Sync */}
             <div className="absolute left-14 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-2 transition-all duration-200 pointer-events-none bg-[#18181b] border border-[#27272a] text-[#f4f4f5] text-xs font-semibold px-3 py-1.5 rounded-xl whitespace-nowrap shadow-2xl z-50">
-              {syncStatus === 'synced' && 'Cloud Synced (Multi-Device Active)'}
-              {(syncStatus === 'saving' || isSyncingManual) && 'Saving changes to Cloud...'}
-              {syncStatus === 'offline' && 'Offline (Saved Locally)'}
-              {syncStatus === 'dev-preview' && 'Dev Preview Mode (Local)'}
-              {syncStatus === 'error' && 'Sync Issue (Click to retry)'}
+              {isSyncingManual
+                ? 'Sedang mengunggah ke Cloud...'
+                : isPullingManual
+                ? 'Sedang memuat dari Cloud...'
+                : syncStatus === 'synced'
+                ? 'Cloud Synced (Klik untuk Sync)'
+                : syncStatus === 'unsynced'
+                ? 'Perubahan lokal tersimpan (Klik untuk Sync ke Cloud)'
+                : syncStatus === 'offline'
+                ? 'Penyimpanan Lokal (Offline)'
+                : syncStatus === 'dev-preview'
+                ? 'Dev Preview Mode (Local)'
+                : 'Sync Issue (Klik untuk coba lagi)'}
             </div>
           </div>
 
@@ -251,40 +300,63 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
 
                 {/* Cloud Sync Status Info Block */}
-                <div className="p-2 my-2 rounded-xl bg-[#121215] border border-[#27272a]">
-                  <div className="flex items-center justify-between mb-1">
+                <div className="p-2.5 my-2 rounded-xl bg-[#121215] border border-[#27272a] flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
                     <span className="text-[11px] font-semibold text-[#d4d4d8] flex items-center gap-1.5">
                       {syncStatus === 'synced' ? (
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      ) : syncStatus === 'saving' || isSyncingManual ? (
+                      ) : syncStatus === 'saving' || isSyncingManual || isPullingManual ? (
                         <Loader2 className="w-3.5 h-3.5 text-orange-400 animate-spin shrink-0" />
+                      ) : syncStatus === 'unsynced' ? (
+                        <Cloud className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                       ) : syncStatus === 'offline' ? (
                         <CloudOff className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
                       ) : (
                         <Terminal className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                       )}
-                      {syncStatus === 'synced' && 'Cloud Synced'}
-                      {(syncStatus === 'saving' || isSyncingManual) && 'Saving to Cloud...'}
+                      {syncStatus === 'synced' && 'Tersimpan di Cloud'}
+                      {(syncStatus === 'saving' || isSyncingManual) && 'Menyimpan ke Cloud...'}
+                      {isPullingManual && 'Memuat dari Cloud...'}
+                      {syncStatus === 'unsynced' && 'Perubahan Belum Sync'}
                       {syncStatus === 'offline' && 'Offline Mode'}
                       {syncStatus === 'dev-preview' && 'Dev Preview'}
                       {syncStatus === 'error' && 'Sync Error'}
                     </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 pt-0.5">
                     {onTriggerSync && (
                       <button
                         onClick={handleManualSyncClick}
-                        disabled={isSyncingManual || syncStatus === 'saving'}
-                        className="text-[10px] text-orange-400 hover:text-orange-300 flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                        title="Force sync with cloud"
+                        disabled={isSyncingManual || isPullingManual}
+                        className="flex-1 py-1 px-2 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 text-[10px] font-medium text-orange-400 hover:text-orange-300 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 transition-colors"
+                        title="Upload perubahan data lokal saat ini ke Cloud"
                       >
-                        <RefreshCw className={`w-3 h-3 ${isSyncingManual ? 'animate-spin' : ''}`} />
-                        Sync
+                        <CloudUpload className={`w-3 h-3 ${isSyncingManual ? 'animate-bounce' : ''}`} />
+                        Sync ke Cloud
+                      </button>
+                    )}
+                    {onPullFromCloud && (
+                      <button
+                        onClick={handleManualPullClick}
+                        disabled={isSyncingManual || isPullingManual}
+                        className="flex-1 py-1 px-2 rounded-lg bg-[#27272a] hover:bg-[#3f3f46] text-[10px] font-medium text-[#d4d4d8] hover:text-[#f4f4f5] flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 transition-colors"
+                        title="Muat data tersimpan dari Cloud ke perangkat lokal"
+                      >
+                        <CloudDownload className={`w-3 h-3 ${isPullingManual ? 'animate-bounce' : ''}`} />
+                        Load dari Cloud
                       </button>
                     )}
                   </div>
+
+                  {syncFeedback && (
+                    <p className="text-[10px] text-orange-300 font-medium">{syncFeedback}</p>
+                  )}
+
                   <p className="text-[10px] text-[#71717a] leading-tight">
                     {lastSyncedAt
-                      ? `Last synced: ${lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
-                      : 'Multi-device cloud storage active'}
+                      ? `Terakhir sync: ${lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+                      : 'Data aman di browser lokal. Klik Sync untuk simpan ke cloud.'}
                   </p>
                 </div>
                 <div className="py-1">
@@ -415,40 +487,63 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
 
                 {/* Cloud Sync Status Info Block (Mobile) */}
-                <div className="p-2 my-2 rounded-xl bg-[#121215] border border-[#27272a]">
-                  <div className="flex items-center justify-between mb-1">
+                <div className="p-2.5 my-2 rounded-xl bg-[#121215] border border-[#27272a] flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
                     <span className="text-[11px] font-semibold text-[#d4d4d8] flex items-center gap-1.5">
                       {syncStatus === 'synced' ? (
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      ) : syncStatus === 'saving' || isSyncingManual ? (
+                      ) : syncStatus === 'saving' || isSyncingManual || isPullingManual ? (
                         <Loader2 className="w-3.5 h-3.5 text-orange-400 animate-spin shrink-0" />
+                      ) : syncStatus === 'unsynced' ? (
+                        <Cloud className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                       ) : syncStatus === 'offline' ? (
                         <CloudOff className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
                       ) : (
                         <Terminal className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                       )}
-                      {syncStatus === 'synced' && 'Cloud Synced'}
-                      {(syncStatus === 'saving' || isSyncingManual) && 'Saving to Cloud...'}
+                      {syncStatus === 'synced' && 'Tersimpan di Cloud'}
+                      {(syncStatus === 'saving' || isSyncingManual) && 'Menyimpan ke Cloud...'}
+                      {isPullingManual && 'Memuat dari Cloud...'}
+                      {syncStatus === 'unsynced' && 'Perubahan Belum Sync'}
                       {syncStatus === 'offline' && 'Offline Mode'}
                       {syncStatus === 'dev-preview' && 'Dev Preview'}
                       {syncStatus === 'error' && 'Sync Error'}
                     </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 pt-0.5">
                     {onTriggerSync && (
                       <button
                         onClick={handleManualSyncClick}
-                        disabled={isSyncingManual || syncStatus === 'saving'}
-                        className="text-[10px] text-orange-400 hover:text-orange-300 flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                        title="Force sync with cloud"
+                        disabled={isSyncingManual || isPullingManual}
+                        className="flex-1 py-1 px-2 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 text-[10px] font-medium text-orange-400 hover:text-orange-300 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 transition-colors"
+                        title="Upload perubahan data lokal saat ini ke Cloud"
                       >
-                        <RefreshCw className={`w-3 h-3 ${isSyncingManual ? 'animate-spin' : ''}`} />
-                        Sync
+                        <CloudUpload className={`w-3 h-3 ${isSyncingManual ? 'animate-bounce' : ''}`} />
+                        Sync ke Cloud
+                      </button>
+                    )}
+                    {onPullFromCloud && (
+                      <button
+                        onClick={handleManualPullClick}
+                        disabled={isSyncingManual || isPullingManual}
+                        className="flex-1 py-1 px-2 rounded-lg bg-[#27272a] hover:bg-[#3f3f46] text-[10px] font-medium text-[#d4d4d8] hover:text-[#f4f4f5] flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 transition-colors"
+                        title="Muat data tersimpan dari Cloud ke perangkat lokal"
+                      >
+                        <CloudDownload className={`w-3 h-3 ${isPullingManual ? 'animate-bounce' : ''}`} />
+                        Load dari Cloud
                       </button>
                     )}
                   </div>
+
+                  {syncFeedback && (
+                    <p className="text-[10px] text-orange-300 font-medium">{syncFeedback}</p>
+                  )}
+
                   <p className="text-[10px] text-[#71717a] leading-tight">
                     {lastSyncedAt
-                      ? `Last synced: ${lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
-                      : 'Multi-device cloud storage active'}
+                      ? `Terakhir sync: ${lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+                      : 'Data aman di browser lokal. Klik Sync untuk simpan ke cloud.'}
                   </p>
                 </div>
                 <div className="py-1">

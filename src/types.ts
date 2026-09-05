@@ -1,5 +1,7 @@
 export type ItemStatus = 'not-started' | 'in-progress' | 'review' | 'completed';
 
+export type PriorityLevel = 'urgent' | 'high' | 'medium' | 'low';
+
 export type ProjectStatus = 'active' | 'archived';
 
 export interface Person {
@@ -35,6 +37,8 @@ export interface ItemNode {
   reviewerId?: string | null;
   estimatedSeconds?: number;
   notes?: string;
+  priority?: PriorityLevel;
+  icon?: string;
   sessions: Session[];
   showInSummary?: boolean;
   subItems: ItemNode[];
@@ -46,6 +50,7 @@ export interface ProjectNode {
   title: string;
   status: ProjectStatus;
   color?: string;
+  description?: string;
   isExpanded?: boolean;
   actualStartDate?: string | null;
   actualEndDate?: string | null;
@@ -94,7 +99,7 @@ export interface AppData {
   _lastModified?: number;
 }
 
-export type ViewMode = 'dashboard' | 'projects' | 'tasks' | 'timeline' | 'calendar' | 'analytics' | 'team' | 'archived';
+export type ViewMode = 'dashboard' | 'projects' | 'notion' | 'tasks' | 'timeline' | 'calendar' | 'analytics' | 'team' | 'archived';
 
 export type TimeScale = 'day' | 'week' | 'month' | 'year';
 export type CalendarViewType = TimeScale;
@@ -107,4 +112,4 @@ export interface AuthUser {
   isAnonymous?: boolean;
 }
 
-export type SyncStatus = 'synced' | 'saving' | 'offline' | 'error' | 'dev-preview';
+export type SyncStatus = 'synced' | 'saving' | 'offline' | 'error' | 'dev-preview' | 'unsynced';

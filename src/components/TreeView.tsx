@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -34,6 +34,12 @@ import {
   getLeafFlatItems,
   getStatusConfig,
 } from '../utils/treeUtils';
+import {
+  TreeSortBy,
+  TreeSortDirection,
+  sortProjectItemsTree,
+  TREE_SORT_OPTIONS,
+} from '../utils/treeSorting';
 
 interface TreeViewProps {
   appData: AppData;
@@ -90,6 +96,38 @@ export const TreeView: React.FC<TreeViewProps> = ({
   const [isProjectFilterOpen, setIsProjectFilterOpen] = useState<boolean>(false);
   const projectFilterRef = useRef<HTMLDivElement>(null);
 
+  // TreeView Sorting State (Persisted in localStorage for convenience)
+  const [sortBy, setSortBy] = useState<TreeSortBy>(() => {
+    try {
+      return (localStorage.getItem('tracker_tree_sort_by') as TreeSortBy) || 'default';
+    } catch {
+      return 'default';
+    }
+  });
+
+  const [sortDirection, setSortDirection] = useState<TreeSortDirection>(() => {
+    try {
+      return (localStorage.getItem('tracker_tree_sort_direction') as TreeSortDirection) || 'asc';
+    } catch {
+      return 'asc';
+    }
+  });
+
+  const handleSortByChange = (newSort: TreeSortBy) => {
+    setSortBy(newSort);
+    try {
+      localStorage.setItem('tracker_tree_sort_by', newSort);
+    } catch {}
+  };
+
+  const handleToggleSortDirection = () => {
+    const nextDir = sortDirection === 'asc' ? 'desc' : 'asc';
+    setSortDirection(nextDir);
+    try {
+      localStorage.setItem('tracker_tree_sort_direction', nextDir);
+    } catch {}
+  };
+
   const currentProjectFilter = selectedProjectId || 'all';
   const currentSearchQuery = searchQuery || '';
 
@@ -108,18 +146,17 @@ export const TreeView: React.FC<TreeViewProps> = ({
     }
   };
 
-  // Close dropdown on outside click
+  // Close active dropdowns on Escape key
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        projectFilterRef.current &&
-        !projectFilterRef.current.contains(event.target as Node)
-      ) {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActiveMenuId(null);
+        setActiveProjectMenuId(null);
         setIsProjectFilterOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const toggleExpand = (id: string) => {
@@ -182,6 +219,12 @@ export const TreeView: React.FC<TreeViewProps> = ({
     if (project.description && project.description.toLowerCase().includes(effectiveSearch)) return true;
     return (project.items || []).some((item) => matchesSearch(item));
   });
+
+  // Apply non-destructive recursive sorting on projects' item tree
+  const displayProjects = useMemo(() => {
+    if (sortBy === 'default') return filteredProjects;
+    return sortProjectItemsTree(filteredProjects, sortBy, sortDirection);
+  }, [filteredProjects, sortBy, sortDirection]);
 
   // Recursive Item Row Renderer
   const renderItemRow = (
@@ -463,87 +506,104 @@ export const TreeView: React.FC<TreeViewProps> = ({
 
             {/* Context Menu Dropdown */}
             {activeMenuId === `more-${item.id}` && (
-              <div
-                className={`absolute right-0 w-48 bg-[#18181b] border border-[#3f3f46] rounded-xl shadow-2xl z-50 p-1.5 text-xs ${
-                  isLastChild ? 'bottom-8' : 'top-8'
-                }`}
-              >
-                <button
-                  onClick={() => {
-                    onOpenAddItemModal(item.id, projectId);
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setActiveMenuId(null);
                   }}
-                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#27272a] text-[#f4f4f5] flex items-center gap-2"
+                />
+                <div
+                  className={`absolute right-0 w-48 bg-[#18181b] border border-[#3f3f46] rounded-xl shadow-2xl z-50 p-1.5 text-xs ${
+                    isLastChild ? 'bottom-8' : 'top-8'
+                  }`}
                 >
-                  <Plus className="w-3.5 h-3.5 text-[#f4f4f5]" /> Add Sub-task
-                </button>
-                <button
-                  onClick={() => {
-                    onOpenEditItemModal(item);
-                    setActiveMenuId(null);
-                  }}
-                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#27272a] text-[#f4f4f5] flex items-center gap-2"
-                >
-                  <Edit2 className="w-3.5 h-3.5 text-[#a1a1aa]" /> Edit Details
-                </button>
-                {onDuplicateItem && (
                   <button
                     onClick={() => {
-                      onDuplicateItem(item.id);
+                      onOpenAddItemModal(item.id, projectId);
                       setActiveMenuId(null);
                     }}
                     className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#27272a] text-[#f4f4f5] flex items-center gap-2"
-                    title="Duplicate task"
                   >
-                    <Copy className="w-3.5 h-3.5 text-orange-400" /> Duplicate Task
+                    <Plus className="w-3.5 h-3.5 text-[#f4f4f5]" /> Add Sub-task
                   </button>
-                )}
-                {onReorderItem && (
-                  <>
+                  <button
+                    onClick={() => {
+                      onOpenEditItemModal(item);
+                      setActiveMenuId(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#27272a] text-[#f4f4f5] flex items-center gap-2"
+                  >
+                    <Edit2 className="w-3.5 h-3.5 text-[#a1a1aa]" /> Edit Details
+                  </button>
+                  {onDuplicateItem && (
                     <button
-                      type="button"
                       onClick={() => {
-                        onReorderItem(item.id, 'up');
+                        onDuplicateItem(item.id);
                         setActiveMenuId(null);
                       }}
-                      disabled={isFirstChild}
-                      className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                        isFirstChild
-                          ? 'text-[#52525b] cursor-not-allowed opacity-50'
-                          : 'hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer'
-                      }`}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#27272a] text-[#f4f4f5] flex items-center gap-2"
+                      title="Duplicate task"
                     >
-                      <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Move Up</span>
+                      <Copy className="w-3.5 h-3.5 text-orange-400" /> Duplicate Task
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onReorderItem(item.id, 'down');
-                        setActiveMenuId(null);
-                      }}
-                      disabled={isLastChild}
-                      className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                        isLastChild
-                          ? 'text-[#52525b] cursor-not-allowed opacity-50'
-                          : 'hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer'
-                      }`}
-                    >
-                      <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Move Down</span>
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={() => {
-                    onDeleteItem(item.id);
-                    setActiveMenuId(null);
-                  }}
-                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#ef4444]/20 text-[#ef4444] flex items-center gap-2 border-t border-[#27272a] mt-1 pt-1.5"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Delete Item
-                </button>
-              </div>
+                  )}
+                  {onReorderItem && (
+                    sortBy !== 'default' ? (
+                      <div className="px-3 py-1.5 text-[10px] text-[#71717a] border-t border-[#27272a] my-0.5">
+                        <span className="italic">
+                          Manual reordering is disabled while sort is active ({TREE_SORT_OPTIONS.find((o) => o.id === sortBy)?.shortLabel}).
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onReorderItem(item.id, 'up');
+                            setActiveMenuId(null);
+                          }}
+                          disabled={isFirstChild}
+                          className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                            isFirstChild
+                              ? 'text-[#52525b] cursor-not-allowed opacity-50'
+                              : 'hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer'
+                          }`}
+                        >
+                          <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Move Up</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onReorderItem(item.id, 'down');
+                            setActiveMenuId(null);
+                          }}
+                          disabled={isLastChild}
+                          className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                            isLastChild
+                              ? 'text-[#52525b] cursor-not-allowed opacity-50'
+                              : 'hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer'
+                          }`}
+                        >
+                          <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Move Down</span>
+                        </button>
+                      </>
+                    )
+                  )}
+                  <button
+                    onClick={() => {
+                      onDeleteItem(item.id);
+                      setActiveMenuId(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#ef4444]/20 text-[#ef4444] flex items-center gap-2 border-t border-[#27272a] mt-1 pt-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete Item
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -575,6 +635,10 @@ export const TreeView: React.FC<TreeViewProps> = ({
         persons={appData.persons}
         selectedPersonId={selectedPersonId}
         onSelectPerson={onSelectPersonFilter}
+        sortBy={sortBy}
+        onSortByChange={handleSortByChange}
+        sortDirection={sortDirection}
+        onToggleSortDirection={handleToggleSortDirection}
         searchQuery={currentSearchQuery}
         onSearchChange={handleSearchInputChange}
         onOpenProjectModal={onOpenProjectModal}
@@ -594,7 +658,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
             <Plus className="w-4 h-4" /> Create New Project
           </button>
         </div>
-      ) : filteredProjects.length === 0 ? (
+      ) : displayProjects.length === 0 ? (
         <div className="bg-[#121215] rounded-xl border border-[#27272a] p-12 text-center text-[#71717a] space-y-4 shadow-2xl">
           <Search className="w-10 h-10 mx-auto text-[#3f3f46]" />
           <h3 className="text-base font-bold text-[#f4f4f5]">No Tasks or Projects Found</h3>
@@ -613,9 +677,9 @@ export const TreeView: React.FC<TreeViewProps> = ({
           </button>
         </div>
       ) : (
-        filteredProjects.map((project, pIdx) => {
+        displayProjects.map((project, pIdx) => {
           const isFirstProject = pIdx === 0;
-          const isLastProject = pIdx === filteredProjects.length - 1;
+          const isLastProject = pIdx === displayProjects.length - 1;
           const projectItems = project.items || [];
           const leafTasks = getLeafFlatItems([project]);
           const pendingCount = leafTasks.filter((f) => f.item.status !== 'completed').length;

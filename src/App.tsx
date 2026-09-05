@@ -4,6 +4,7 @@ import { AppData, ItemNode, ItemStatus, Person, ProjectNode, ProjectStatus, View
 import { initialAppData } from './defaultData';
 import { Header } from './components/Header';
 import { TreeView } from './components/TreeView';
+import { NotionTreeView } from './components/NotionTreeView';
 import { KanbanView } from './components/KanbanView';
 import { TimelineView } from './components/TimelineView';
 import { CalendarView } from './components/CalendarView';
@@ -800,11 +801,11 @@ function WorkspaceApp() {
     setIsProjectModalOpen(true);
   };
 
-  if (isLoading || (currentUser && !isDevBypass && !isInitialCloudLoaded)) {
+  if (isLoading) {
     return (
       <div className="min-h-screen w-full bg-[#09090b] flex flex-col items-center justify-center text-[#a1a1aa] gap-3 select-none">
         <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-        <p className="text-xs font-medium tracking-wide">Syncing cloud workspace...</p>
+        <p className="text-xs font-medium tracking-wide">Memuat workspace...</p>
       </div>
     );
   }
@@ -834,10 +835,11 @@ function WorkspaceApp() {
         syncStatus={syncStatus}
         lastSyncedAt={lastSyncedAt}
         onTriggerSync={triggerManualSync}
+        onPullFromCloud={forcePullFromCloud}
       />
 
       {/* Main Content Area - Offset by Sidebar Width on Desktop, and padded bottom for Mobile Bottom Bar */}
-      <main className="flex-1 min-w-0 ml-0 md:ml-16 px-3 sm:px-6 lg:px-8 pt-4 pb-24 md:py-6 min-h-screen w-full overflow-x-hidden">
+      <main className="flex-1 min-w-0 ml-0 md:ml-16 min-h-screen w-full overflow-x-hidden px-3 sm:px-6 lg:px-8 pt-4 pb-24 md:py-6">
         <div className="w-full">
           {currentView === 'projects' && (
             <TreeView
@@ -863,6 +865,30 @@ function WorkspaceApp() {
               onArchiveProject={handleArchiveProject}
               searchQuery={searchQuery}
               onSearchChange={handleSearchQueryChange}
+            />
+          )}
+
+          {currentView === 'notion' && (
+            <NotionTreeView
+              appData={appData}
+              onUpdateItemStatus={handleUpdateItemStatus}
+              onOpenEditItemModal={openEditItemModal}
+              onOpenAddItemModal={openAddItemModal}
+              onDeleteItem={handleDeleteItem}
+              onReorderItem={handleReorderItem}
+              onDuplicateItem={handleDuplicateItem}
+              onToggleExpand={handleToggleItemExpand}
+              onSetAllExpand={handleSetAllExpand}
+              onSaveData={persistData}
+              onStartTimer={handleStartTimer}
+              onStopTimer={handleStopTimer}
+              selectedProjectId={selectedProjectId}
+              onSelectProjectFilter={handleSelectProjectFilter}
+              selectedPersonId={selectedPersonId}
+              onSelectPersonFilter={handleSelectPersonFilter}
+              searchQuery={searchQuery}
+              onSearchChange={handleSearchQueryChange}
+              onOpenProjectModal={openProjectModal}
             />
           )}
 

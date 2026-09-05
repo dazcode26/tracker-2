@@ -1,6 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Folder, Search, X, ChevronDown, Plus, Users } from 'lucide-react';
+import {
+  Folder,
+  Search,
+  X,
+  ChevronDown,
+  Plus,
+  Users,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Check,
+  RotateCcw,
+} from 'lucide-react';
 import { Person, ProjectNode } from '../types';
+import { TreeSortBy, TreeSortDirection, TREE_SORT_OPTIONS } from '../utils/treeSorting';
 
 export interface StructureToolbarProps {
   // Project Filter
@@ -12,6 +25,12 @@ export interface StructureToolbarProps {
   persons?: Person[];
   selectedPersonId?: string;
   onSelectPerson?: (personId: string) => void;
+
+  // Sorting Controls
+  sortBy?: TreeSortBy;
+  onSortByChange?: (sortBy: TreeSortBy) => void;
+  sortDirection?: TreeSortDirection;
+  onToggleSortDirection?: () => void;
 
   // Search Input
   searchQuery: string;
@@ -28,15 +47,21 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
   persons = [],
   selectedPersonId = 'all',
   onSelectPerson,
+  sortBy = 'default',
+  onSortByChange,
+  sortDirection = 'asc',
+  onToggleSortDirection,
   searchQuery,
   onSearchChange,
   onOpenProjectModal,
 }) => {
   const [isProjectFilterOpen, setIsProjectFilterOpen] = useState(false);
   const [isPersonFilterOpen, setIsPersonFilterOpen] = useState(false);
+  const [isSortFilterOpen, setIsSortFilterOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const projectFilterRef = useRef<HTMLDivElement>(null);
   const personFilterRef = useRef<HTMLDivElement>(null);
+  const sortFilterRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Focus search input when mobile search is opened
@@ -46,24 +71,44 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
     }
   }, [isMobileSearchOpen]);
 
-  // Click outside listener
+  // Click outside listener & Escape key handler
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: Event) => {
+      const target = event.target as Node;
       if (
         projectFilterRef.current &&
-        !projectFilterRef.current.contains(event.target as Node)
+        !projectFilterRef.current.contains(target)
       ) {
         setIsProjectFilterOpen(false);
       }
       if (
         personFilterRef.current &&
-        !personFilterRef.current.contains(event.target as Node)
+        !personFilterRef.current.contains(target)
       ) {
         setIsPersonFilterOpen(false);
       }
+      if (
+        sortFilterRef.current &&
+        !sortFilterRef.current.contains(target)
+      ) {
+        setIsSortFilterOpen(false);
+      }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsProjectFilterOpen(false);
+        setIsPersonFilterOpen(false);
+        setIsSortFilterOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   const handleCloseMobileSearch = () => {
@@ -87,6 +132,8 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
   const activeProjects = projects.filter((p) => p.status === 'active');
   const selectedProject = activeProjects.find((p) => p.id === selectedProjectId);
   const selectedPerson = persons.find((u) => u.id === selectedPersonId);
+  const activeSortOption = TREE_SORT_OPTIONS.find((opt) => opt.id === sortBy) || TREE_SORT_OPTIONS[0];
+  const isNonDefaultSort = sortBy !== 'default';
 
   return (
     <div className="flex items-center justify-between gap-2 sm:gap-3 pb-2 border-b border-[#27272a] h-10 relative">
@@ -156,7 +203,12 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
           </button>
 
           {isProjectFilterOpen && (
-            <div className="absolute left-0 mt-1.5 w-56 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1 z-50 flex flex-col gap-0.5 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setIsProjectFilterOpen(false)}
+              />
+              <div className="absolute left-0 mt-1.5 w-56 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1 z-50 flex flex-col gap-0.5 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
               <button
                 type="button"
                 onClick={() => {
@@ -197,6 +249,7 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                 </button>
               ))}
             </div>
+            </>
           )}
         </div>
 
@@ -237,7 +290,12 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
             </button>
 
             {isPersonFilterOpen && (
-              <div className="absolute left-0 mt-1.5 w-60 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1 z-50 flex flex-col gap-0.5 max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsPersonFilterOpen(false)}
+                />
+                <div className="absolute left-0 mt-1.5 w-60 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1 z-50 flex flex-col gap-0.5 max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
                 <button
                   type="button"
                   onClick={() => {
@@ -292,6 +350,159 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                   </button>
                 ))}
               </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* SORT Dropdown & Direction Toggle */}
+        {onSortByChange && (
+          <div className="relative shrink-0 flex items-center gap-1" ref={sortFilterRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setIsSortFilterOpen(!isSortFilterOpen);
+                setIsProjectFilterOpen(false);
+                setIsPersonFilterOpen(false);
+              }}
+              className={`h-8 flex items-center gap-1.5 px-2.5 rounded-xl border text-xs font-semibold shadow-xs transition-all cursor-pointer ${
+                isNonDefaultSort
+                  ? 'bg-orange-500/15 border-orange-500/50 text-orange-400 font-bold hover:bg-orange-500/25'
+                  : 'bg-[#18181b] border-[#27272a] text-[#f4f4f5] hover:bg-[#27272a] hover:border-orange-500/40'
+              }`}
+              title="Sort Tasks"
+            >
+              <ArrowUpDown className={`w-3.5 h-3.5 shrink-0 ${isNonDefaultSort ? 'text-orange-400' : 'text-[#a1a1aa]'}`} />
+              <span className="font-semibold tracking-wide">
+                {activeSortOption.shortLabel}
+              </span>
+              <ChevronDown className="w-3 h-3 text-[#71717a] shrink-0" />
+            </button>
+
+            {/* Ascending / Descending Direction Toggle Button */}
+            {isNonDefaultSort && onToggleSortDirection && (
+              <button
+                type="button"
+                onClick={onToggleSortDirection}
+                className="h-8 w-8 rounded-xl bg-orange-500/15 border border-orange-500/40 hover:bg-orange-500/25 flex items-center justify-center text-orange-400 hover:text-orange-300 transition-all cursor-pointer shrink-0"
+                title={`Order: ${
+                  sortDirection === 'asc'
+                    ? 'Ascending (A–Z / Low to High)'
+                    : 'Descending (Z–A / High to Low)'
+                } - Click to reverse`}
+              >
+                {sortDirection === 'asc' ? (
+                  <ArrowUp className="w-3.5 h-3.5" />
+                ) : (
+                  <ArrowDown className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+
+            {isSortFilterOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsSortFilterOpen(false)}
+                />
+                <div className="absolute left-0 top-full mt-1.5 w-64 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-2 py-1 flex items-center justify-between border-b border-[#27272a]">
+                  <span className="text-[11px] font-bold text-[#a1a1aa] uppercase tracking-wider">
+                    Sort Tasks (Hierarchical)
+                  </span>
+                  {isNonDefaultSort && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSortByChange('default');
+                        setIsSortFilterOpen(false);
+                      }}
+                      className="text-[10px] text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-0.5">
+                  {TREE_SORT_OPTIONS.map((opt) => {
+                    const isSelected = sortBy === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          onSortByChange(opt.id);
+                          setIsSortFilterOpen(false);
+                        }}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer flex items-center justify-between ${
+                          isSelected
+                            ? 'bg-orange-500/15 text-orange-400 font-bold'
+                            : 'text-[#a1a1aa] hover:bg-[#27272a] hover:text-[#f4f4f5]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0 pr-2">
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 ${
+                              isSelected
+                                ? 'bg-orange-500/25 text-orange-300'
+                                : 'bg-[#27272a] text-[#a1a1aa]'
+                            }`}
+                          >
+                            {opt.shortLabel}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">{opt.label}</div>
+                            <div className="text-[10px] text-[#71717a] font-normal truncate">
+                              {opt.description}
+                            </div>
+                          </div>
+                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-orange-400 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Direction segmented control inside dropdown */}
+                {isNonDefaultSort && onToggleSortDirection && (
+                  <div className="pt-1.5 border-t border-[#27272a] mt-0.5">
+                    <div className="text-[10px] text-[#71717a] font-medium px-2 pb-1">
+                      Sort Direction:
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 bg-[#121215] p-1 rounded-lg border border-[#27272a]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (sortDirection !== 'asc') onToggleSortDirection();
+                        }}
+                        className={`px-2 py-1 rounded text-[11px] font-medium flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                          sortDirection === 'asc'
+                            ? 'bg-orange-500 text-white shadow-xs font-bold'
+                            : 'text-[#a1a1aa] hover:text-white'
+                        }`}
+                      >
+                        <ArrowUp className="w-3 h-3" /> Ascending
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (sortDirection !== 'desc') onToggleSortDirection();
+                        }}
+                        className={`px-2 py-1 rounded text-[11px] font-medium flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                          sortDirection === 'desc'
+                            ? 'bg-orange-500 text-white shadow-xs font-bold'
+                            : 'text-[#a1a1aa] hover:text-white'
+                        }`}
+                      >
+                        <ArrowDown className="w-3 h-3" /> Descending
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              </>
             )}
           </div>
         )}

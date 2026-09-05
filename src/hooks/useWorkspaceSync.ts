@@ -129,26 +129,32 @@ export function useWorkspaceSync(
     return initialAppData;
   });
 
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>(() =>
-    isDevBypass ? 'dev-preview' : 'synced'
-  );
-  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const [isInitialCloudLoaded, setIsInitialCloudLoaded] = useState<boolean>(false);
-  const isInitialCloudLoadedRef = useRef<boolean>(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(() => {
+    if (isDevBypass) return 'dev-preview';
+    const hasUnsynced = localStorage.getItem('struktur_has_unsynced') === 'true';
+    return hasUnsynced ? 'unsynced' : 'synced';
+  });
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(() => {
+    try {
+      const saved = localStorage.getItem('struktur_last_synced_at');
+      if (saved) {
+        const d = new Date(saved);
+        if (!isNaN(d.getTime())) return d;
+      }
+    } catch {}
+    return null;
+  });
+  const [isInitialCloudLoaded, setIsInitialCloudLoaded] = useState<boolean>(true);
+  const isInitialCloudLoadedRef = useRef<boolean>(true);
   const [syncError, setSyncError] = useState<string | null>(null);
 
   // Keep a ref of current appData to avoid stale closure during remote sync
   const appDataRef = useRef<AppData>(appData);
   appDataRef.current = appData;
 
-  // Track last saved projects JSON from local client to prevent redundant re-renders on remote echo
-  const lastSavedProjectsJsonRef = useRef<string>('');
-
-  // Debounce ref for Firestore write operations
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isIncomingRemoteUpdateRef = useRef<boolean>(false);
-  const lastHistorySnapshotTimeRef = useRef<number>(0);
-  const hasUnsyncedLocalChangesRef = useRef<boolean>(false);
+  const hasUnsyncedLocalChangesRef = useRef<boolean>(() => {
+    return localStorage.getItem('struktur_has_unsynced') === 'true';
+  });
 
   // Helper to count total tasks across all projects
   const countTotalTasks = (projects: any[]): number => {
@@ -174,7 +180,6 @@ export function useWorkspaceSync(
         lastLogDetails: data.activityLogs?.[0]?.details || null,
         data: JSON.parse(JSON.stringify(data)),
       });
-      lastHistorySnapshotTimeRef.current = Date.now();
 
       // Automatically prune snapshots older than the latest 5 to keep storage tidy
       const q = query(historyColRef, orderBy('createdAt', 'desc'));
@@ -190,150 +195,18 @@ export function useWorkspaceSync(
     }
   }, []);
 
-  // 1. Setup Cloud Firestore real-time synchronization
+  // 1. Local-first initialization: No automatic load from cloud on startup
   useEffect(() => {
-    if (!currentUser || isDevBypass) {
-      setSyncStatus(isDevBypass ? 'dev-preview' : 'offline');
-      setIsInitialCloudLoaded(true);
-      isInitialCloudLoadedRef.current = true;
-      return;
+    setIsInitialCloudLoaded(true);
+    isInitialCloudLoadedRef.current = true;
+    if (isDevBypass) {
+      setSyncStatus('dev-preview');
+    } else if (!currentUser) {
+      setSyncStatus('offline');
     }
+  }, [currentUser, isDevBypass]);
 
-    const userId = currentUser.uid;
-    const workspaceDocRef = doc(db, 'users', userId, 'workspace', 'data');
-    setSyncStatus('saving');
-
-    // Subscribe to real-time changes across devices
-    const unsubscribe = onSnapshot(
-      workspaceDocRef,
-      { includeMetadataChanges: true },
-      async (snapshot) => {
-        try {
-          if (!snapshot.exists()) {
-            // First time login for this user account:
-            // Migrate existing local workspace or template data to Firestore
-            console.info('First-time user setup: Migrating initial workspace data to Firestore...');
-            const dataToMigrate = appDataRef.current && appDataRef.current.projects?.length > 0
-              ? appDataRef.current
-              : initialAppData;
-
-            // Sanitize JSON to prevent undefined values in Firestore
-            const cleanData = JSON.parse(JSON.stringify(dataToMigrate));
-
-            // Ensure parent user document exists with metadata to avoid phantom doc in Firebase Console
-            setDoc(
-              doc(db, 'users', userId),
-              {
-                email: currentUser.email || null,
-                displayName: currentUser.displayName || null,
-                lastActive: serverTimestamp(),
-              },
-              { merge: true }
-            ).catch(() => {});
-
-            await setDoc(workspaceDocRef, {
-              ...cleanData,
-              _updatedAt: serverTimestamp(),
-              _ownerEmail: currentUser.email || null,
-            });
-
-            // Save initial snapshot to history
-            saveCloudSnapshot(userId, cleanData).catch(() => {});
-
-            setAppData(cleanData);
-            localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(cleanData));
-            setSyncStatus('synced');
-            setLastSyncedAt(new Date());
-            setIsInitialCloudLoaded(true);
-            isInitialCloudLoadedRef.current = true;
-            return;
-          }
-
-          // Remote document exists
-          const remoteData = snapshot.data() as AppData;
-          if (remoteData && Array.isArray(remoteData.projects)) {
-            // If snapshot is from local write pending confirmation
-            if (snapshot.metadata.hasPendingWrites) {
-              setSyncStatus('saving');
-            } else {
-              // Remote update from another device or confirmed server write
-              const remoteProjectsJson = JSON.stringify(remoteData.projects);
-              const isLocalMatch = remoteProjectsJson === lastSavedProjectsJsonRef.current;
-              const hasPendingLocalTimeout = saveTimeoutRef.current !== null;
-              const hasUnsyncedChanges = hasUnsyncedLocalChangesRef.current;
-
-              // If this snapshot is an echo of our local write or we have pending unsynced changes,
-              // do NOT overwrite local appData to avoid losing user edits
-              if (isLocalMatch || hasPendingLocalTimeout || hasUnsyncedChanges) {
-                if (!hasUnsyncedChanges) {
-                  setSyncStatus('synced');
-                  setLastSyncedAt(new Date());
-                  setSyncError(null);
-                }
-              } else {
-                const localModified = appDataRef.current?._lastModified || 0;
-                const remoteModified = remoteData._lastModified || 0;
-                const localStats = computeDataStats(appDataRef.current);
-                const remoteStats = computeDataStats(remoteData);
-
-                const localHasUnsyncedWork =
-                  localModified > remoteModified ||
-                  localStats.sessionCount > remoteStats.sessionCount ||
-                  localStats.totalLoggedSeconds > remoteStats.totalLoggedSeconds;
-
-                if (localHasUnsyncedWork) {
-                  console.info(
-                    `Preserving local workspace: local (mod: ${localModified}, ${localStats.sessionCount} sessions) vs remote (mod: ${remoteModified}, ${remoteStats.sessionCount} sessions). Re-syncing local to cloud.`
-                  );
-                  // Retain local state and push to cloud to heal remote document
-                  setSyncStatus('saving');
-                  hasUnsyncedLocalChangesRef.current = true;
-                  setTimeout(() => {
-                    if (appDataRef.current) {
-                      persistData(appDataRef.current);
-                    }
-                  }, 400);
-                } else {
-                  isIncomingRemoteUpdateRef.current = true;
-                  setAppData(remoteData);
-                  try {
-                    localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(remoteData));
-                  } catch {}
-                  setSyncStatus('synced');
-                  setLastSyncedAt(new Date());
-                  setSyncError(null);
-                }
-              }
-            }
-          }
-          setIsInitialCloudLoaded(true);
-          isInitialCloudLoadedRef.current = true;
-        } catch (err: any) {
-          console.error('Error handling Firestore snapshot:', err);
-          setSyncError(err?.message || 'Failed to sync with cloud');
-          setSyncStatus('offline');
-          setIsInitialCloudLoaded(true);
-          isInitialCloudLoadedRef.current = true;
-        }
-      },
-      (error) => {
-        console.warn('Firestore subscription error (working offline/fallback):', error);
-        setSyncStatus('offline');
-        setSyncError(error.message);
-        setIsInitialCloudLoaded(true);
-        isInitialCloudLoadedRef.current = true;
-      }
-    );
-
-    return () => {
-      unsubscribe();
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [currentUser?.uid, isDevBypass, saveCloudSnapshot]);
-
-  // 2. Persist data: optimistic local update + debounced Firestore push
+  // 2. Persist data: Local storage only (No automatic upload to cloud)
   const persistData = useCallback(
     (newData: AppData, options?: { localOnly?: boolean }) => {
       // 1. Immediate optimistic UI update with timestamp
@@ -344,18 +217,18 @@ export function useWorkspaceSync(
 
       setAppData(stampedData);
       appDataRef.current = stampedData;
-      try {
-        lastSavedProjectsJsonRef.current = JSON.stringify(stampedData.projects);
-      } catch {}
 
       // 2. Persist to localStorage immediately for instant offline safety
       try {
         localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(stampedData));
+        if (!options?.localOnly) {
+          localStorage.setItem('struktur_has_unsynced', 'true');
+        }
       } catch (err) {
         console.warn('LocalStorage quota warning:', err);
       }
 
-      // If local-only change (e.g. tree expand/collapse UI state), skip server/cloud write
+      // If local-only change (e.g. tree expand/collapse UI state), skip marking unsynced
       if (options?.localOnly) {
         return;
       }
@@ -367,74 +240,20 @@ export function useWorkspaceSync(
         body: JSON.stringify(stampedData),
       }).catch(() => {});
 
-      // 4. In dev bypass mode, local persistence is sufficient
-      if (isDevBypass || !currentUser) {
-        setSyncStatus(isDevBypass ? 'dev-preview' : 'offline');
-        return;
-      }
-
-      // 4b. Guard against pushing stale local cache before cloud snapshot finishes loading
-      if (!isInitialCloudLoadedRef.current) {
-        console.warn('Blocked cloud write: Waiting for initial cloud snapshot first.');
-        return;
-      }
-
-      // 5. Debounce push to Firestore (500ms debounce to prevent rapid consecutive writes)
-      setSyncStatus('saving');
+      // Mark that local changes exist waiting for manual sync
       hasUnsyncedLocalChangesRef.current = true;
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
+      if (isDevBypass) {
+        setSyncStatus('dev-preview');
+      } else if (!currentUser) {
+        setSyncStatus('offline');
+      } else {
+        setSyncStatus('unsynced');
       }
-
-      saveTimeoutRef.current = setTimeout(async () => {
-        try {
-          const workspaceDocRef = doc(db, 'users', currentUser.uid, 'workspace', 'data');
-          // Clean undefined values before writing to Firestore
-          const cleanData = JSON.parse(JSON.stringify(stampedData));
-
-          setDoc(
-            doc(db, 'users', currentUser.uid),
-            {
-              email: currentUser.email || null,
-              displayName: currentUser.displayName || null,
-              lastActive: serverTimestamp(),
-            },
-            { merge: true }
-          ).catch(() => {});
-
-          await withTimeout(
-            setDoc(workspaceDocRef, {
-              ...cleanData,
-              _updatedAt: serverTimestamp(),
-              _ownerEmail: currentUser.email || null,
-            }),
-            25000,
-            'Koneksi cloud lambat. Data aman di perangkat.'
-          );
-
-          // Throttle auto-snapshot to history subcollection (at most once every 5 minutes)
-          if (Date.now() - lastHistorySnapshotTimeRef.current > 5 * 60 * 1000) {
-            saveCloudSnapshot(currentUser.uid, cleanData).catch(() => {});
-          }
-
-          saveTimeoutRef.current = null;
-          hasUnsyncedLocalChangesRef.current = false;
-          setSyncStatus('synced');
-          setLastSyncedAt(new Date());
-          setSyncError(null);
-        } catch (err: any) {
-          saveTimeoutRef.current = null;
-          console.error('Failed to sync changes to Firestore:', err);
-          hasUnsyncedLocalChangesRef.current = true;
-          setSyncStatus('offline');
-          setSyncError(err?.message || 'Koneksi cloud lambat. Data aman di penyimpanan lokal.');
-        }
-      }, 500);
     },
-    [currentUser, isDevBypass, saveCloudSnapshot]
+    [currentUser, isDevBypass]
   );
 
-  // 3. Manual Sync / Force Refresh
+  // 3. Manual Sync: Push local changes to cloud on explicit user demand
   const triggerManualSync = useCallback(async () => {
     if (!currentUser || isDevBypass) {
       setSyncStatus(isDevBypass ? 'dev-preview' : 'offline');
@@ -445,9 +264,19 @@ export function useWorkspaceSync(
       setSyncStatus('saving');
       const workspaceDocRef = doc(db, 'users', currentUser.uid, 'workspace', 'data');
 
-      // User clicked sync to ensure their latest local changes are pushed and stored in cloud
+      // User clicked sync to upload their local changes to cloud
       const currentData = appDataRef.current;
       const cleanData = JSON.parse(JSON.stringify(currentData));
+
+      setDoc(
+        doc(db, 'users', currentUser.uid),
+        {
+          email: currentUser.email || null,
+          displayName: currentUser.displayName || null,
+          lastActive: serverTimestamp(),
+        },
+        { merge: true }
+      ).catch(() => {});
 
       await withTimeout(
         setDoc(workspaceDocRef, {
@@ -462,13 +291,19 @@ export function useWorkspaceSync(
       saveCloudSnapshot(currentUser.uid, cleanData).catch(() => {});
 
       hasUnsyncedLocalChangesRef.current = false;
+      try {
+        localStorage.removeItem('struktur_has_unsynced');
+        const nowIso = new Date().toISOString();
+        localStorage.setItem('struktur_last_synced_at', nowIso);
+      } catch {}
+
       setSyncStatus('synced');
       setLastSyncedAt(new Date());
       setSyncError(null);
     } catch (err: any) {
       console.error('Manual sync failed:', err);
       hasUnsyncedLocalChangesRef.current = true;
-      setSyncStatus('offline');
+      setSyncStatus('error');
       setSyncError(err?.message || 'Manual sync failed (koneksi lambat)');
     }
   }, [currentUser, isDevBypass, saveCloudSnapshot]);
@@ -599,6 +434,10 @@ export function useWorkspaceSync(
       const remoteData = snapshot.data() as AppData;
       if (remoteData && Array.isArray(remoteData.projects)) {
         hasUnsyncedLocalChangesRef.current = false;
+        try {
+          localStorage.removeItem('struktur_has_unsynced');
+          localStorage.setItem('struktur_last_synced_at', new Date().toISOString());
+        } catch {}
         setAppData(remoteData);
         localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(remoteData));
         setSyncStatus('synced');

@@ -332,18 +332,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                   : syncStatus === 'saving'
                   ? 'bg-orange-500/10 text-orange-400 border-orange-500/30'
-                  : isDevBypass
+                  : syncStatus === 'unsynced'
                   ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                  : isDevBypass
+                  ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
                   : 'bg-neutral-500/10 text-neutral-400 border-neutral-500/30'
               }`}
             >
               {syncStatus === 'synced'
-                ? 'Synced to Cloud'
+                ? 'Tersimpan di Cloud'
                 : syncStatus === 'saving'
-                ? 'Syncing...'
+                ? 'Menyimpan...'
+                : syncStatus === 'unsynced'
+                ? 'Perubahan Lokal Belum Di-sync'
                 : isDevBypass
-                ? 'Dev Mode (Local Storage)'
-                : 'Offline / Disconnected'}
+                ? 'Dev Mode (Lokal)'
+                : 'Offline / Lokal'}
             </span>
           </div>
 
