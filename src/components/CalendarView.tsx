@@ -511,15 +511,25 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     return events;
   }, [activeProjects, appData.settings.activeTimer]);
 
+  const selectedProjectIds = useMemo(() => {
+    if (!currentProjectId || currentProjectId === 'all') return [];
+    return currentProjectId.split(',').filter(Boolean);
+  }, [currentProjectId]);
+
+  const selectedPersonIds = useMemo(() => {
+    if (!selectedPersonId || selectedPersonId === 'all') return [];
+    return selectedPersonId.split(',').filter(Boolean);
+  }, [selectedPersonId]);
+
   // Filter events based on active filters
   const filteredEvents = useMemo(() => {
     return allEvents.filter((ev) => {
-      if (currentProjectId !== 'all' && ev.project.id !== currentProjectId) {
+      if (selectedProjectIds.length > 0 && !selectedProjectIds.includes(ev.project.id)) {
         return false;
       }
-      if (selectedPersonId && selectedPersonId !== 'all') {
-        const matchAssignee = ev.item.assigneeId === selectedPersonId;
-        const matchReviewer = ev.item.reviewerId === selectedPersonId;
+      if (selectedPersonIds.length > 0) {
+        const matchAssignee = ev.item.assigneeId && selectedPersonIds.includes(ev.item.assigneeId);
+        const matchReviewer = ev.item.reviewerId && selectedPersonIds.includes(ev.item.reviewerId);
         if (!matchAssignee && !matchReviewer) return false;
       }
       if (!showCompleted && ev.status === 'completed') {
@@ -533,7 +543,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       }
       return true;
     });
-  }, [allEvents, currentProjectId, selectedPersonId, showCompleted, currentSearchQuery]);
+  }, [allEvents, selectedProjectIds, selectedPersonIds, showCompleted, currentSearchQuery]);
 
   // Map events by dateKey for fast lookup
   const eventsByDateKey = useMemo(() => {

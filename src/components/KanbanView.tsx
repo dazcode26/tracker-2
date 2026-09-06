@@ -1,8 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Play, Square, MoreHorizontal, Clock, User, ArrowRight, Copy, Check, ChevronRight, ChevronDown, Target, Folder, Search, X, Plus } from 'lucide-react';
 import { StructureToolbar } from './StructureToolbar';
+import { PortalMenu } from './PortalMenu';
 import { AppData, ItemNode, ItemStatus, ProjectNode } from '../types';
-import { getLeafFlatItems, formatDuration, getItemLoggedSeconds } from '../utils/treeUtils';
+import { getLeafFlatItems, formatDuration, getItemLoggedSeconds, getStatusConfig } from '../utils/treeUtils';
+
+interface MenuAnchorState {
+  id: string;
+  rect: DOMRect;
+  el: HTMLElement;
+}
 
 interface KanbanViewProps {
   appData: AppData;
@@ -21,33 +28,6 @@ interface KanbanViewProps {
   onSearchChange?: (query: string) => void;
 }
 
-const statusConfigs: Record<ItemStatus, { label: string; badge: string; text: string; bg: string }> = {
-  'not-started': {
-    label: 'Not Started',
-    badge: 'bg-zinc-800 text-zinc-300 border-zinc-700',
-    text: 'text-zinc-400',
-    bg: 'bg-zinc-700',
-  },
-  'in-progress': {
-    label: 'In Progress',
-    badge: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-    text: 'text-blue-400',
-    bg: 'bg-blue-500',
-  },
-  'review': {
-    label: 'In Review',
-    badge: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    text: 'text-amber-400',
-    bg: 'bg-amber-500',
-  },
-  'completed': {
-    label: 'Completed',
-    badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-    text: 'text-emerald-400',
-    bg: 'bg-emerald-500',
-  },
-};
-
 export const KanbanView: React.FC<KanbanViewProps> = ({
   appData,
   onStartTimer,
@@ -64,7 +44,19 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   searchQuery = '',
   onSearchChange,
 }) => {
-  const [activeStatusDropdownId, setActiveStatusDropdownId] = useState<string | null>(null);
+  const [activeStatusAnchor, setActiveStatusAnchor] = useState<MenuAnchorState | null>(null);
+
+  // Close active dropdowns on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActiveStatusAnchor(null);
+        setIsProjectFilterOpen(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Search and Project Filter states fallback
   const [internalSearchQuery, setInternalSearchQuery] = useState<string>('');
@@ -110,14 +102,24 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   const allFlatItems = getLeafFlatItems(activeProjects);
   const activeTimer = appData.settings.activeTimer;
 
-  // Filter tasks based on selected project, selected person, and search query
+  const selectedProjectIds = useMemo(() => {
+    if (!currentProjectId || currentProjectId === 'all') return [];
+    return currentProjectId.split(',').filter(Boolean);
+  }, [currentProjectId]);
+
+  const selectedPersonIds = useMemo(() => {
+    if (!selectedPersonId || selectedPersonId === 'all') return [];
+    return selectedPersonId.split(',').filter(Boolean);
+  }, [selectedPersonId]);
+
+  // Filter tasks based on selected projects, selected persons, and search query
   const flatItems = allFlatItems.filter(({ item, project, parentPath }) => {
-    if (currentProjectId !== 'all' && project.id !== currentProjectId) {
+    if (selectedProjectIds.length > 0 && !selectedProjectIds.includes(project.id)) {
       return false;
     }
-    if (selectedPersonId && selectedPersonId !== 'all') {
-      const matchAssignee = item.assigneeId === selectedPersonId;
-      const matchReviewer = item.reviewerId === selectedPersonId;
+    if (selectedPersonIds.length > 0) {
+      const matchAssignee = item.assigneeId && selectedPersonIds.includes(item.assigneeId);
+      const matchReviewer = item.reviewerId && selectedPersonIds.includes(item.reviewerId);
       if (!matchAssignee && !matchReviewer) return false;
     }
     if (!currentSearchQuery.trim()) return true;
@@ -292,8 +294,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       ? parentPath.join(' > ')
                       : project.title;
 
-                  const conf = statusConfigs[item.status] || statusConfigs['in-progress'];
-                  const isStatusOpen = activeStatusDropdownId === item.id;
+                  const statusCfg = getStatusConfig(item.status);
 
                   return (
                     <div
@@ -399,63 +400,56 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                             </button>
                           )}
 
-                          {/* Quick Change Status Pill Dropdown */}
-                          <div className="relative">
+                          {/* Quick Change Status Pill Dropdown (Notion View style) */}
+                          <div className="relative" data-popover-root>
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveStatusDropdownId(isStatusOpen ? null : item.id);
+                                setActiveStatusAnchor(
+                                  activeStatusAnchor?.id === item.id
+                                    ? null
+                                    : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                                );
                               }}
-                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer hover:brightness-125 shadow-xs ${conf.badge}`}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:opacity-85 border ${statusCfg.badgeBorder} ${statusCfg.badgeBg} ${statusCfg.textColor}`}
                               title="Click to change task status"
                             >
-                              <span className={`w-1.5 h-1.5 rounded-full ${conf.bg}`} />
-                              <span>{conf.label}</span>
-                              <ChevronDown className={`w-3 h-3 opacity-70 transition-transform duration-150 ${isStatusOpen ? 'rotate-180' : ''}`} />
+                              <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotBg}`} />
+                              <span className="capitalize whitespace-nowrap">{statusCfg.label}</span>
                             </button>
 
-                            {isStatusOpen && (
-                              <>
-                                <div
-                                  className="fixed inset-0 z-40"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveStatusDropdownId(null);
-                                  }}
-                                />
-                                <div
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="absolute right-0 bottom-full mb-1.5 w-44 bg-[#18181b] border border-[#3f3f46] rounded-xl shadow-2xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95 duration-100"
-                                >
-                                  {(['not-started', 'in-progress', 'review', 'completed'] as ItemStatus[]).map((st) => {
-                                    const optConfig = statusConfigs[st];
-                                    const isSelected = item.status === st;
-                                    return (
-                                      <div
-                                        key={st}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onUpdateItemStatus(item.id, st);
-                                          setActiveStatusDropdownId(null);
-                                        }}
-                                        className={`p-1.5 rounded-lg flex items-center justify-between cursor-pointer transition-colors ${
-                                          isSelected
-                                            ? `${optConfig.badge} font-bold`
-                                            : 'text-[#d4d4d8] hover:bg-[#27272a]'
-                                        }`}
-                                      >
-                                        <div className="flex items-center gap-2">
-                                          <span className={`w-2 h-2 rounded-full ${optConfig.bg}`} />
-                                          <span className="text-xs">{optConfig.label}</span>
-                                        </div>
-                                        {isSelected && <Check className="w-3.5 h-3.5 text-orange-400" />}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </>
-                            )}
+                            {/* Status Dropdown Popover matching Notion View */}
+                            <PortalMenu
+                              isOpen={activeStatusAnchor?.id === item.id}
+                              onClose={() => setActiveStatusAnchor(null)}
+                              anchorRect={activeStatusAnchor?.id === item.id ? activeStatusAnchor.rect : null}
+                              triggerElement={activeStatusAnchor?.id === item.id ? activeStatusAnchor.el : null}
+                              align="right"
+                              className="w-36 flex flex-col gap-0.5"
+                            >
+                              {(['not-started', 'in-progress', 'review', 'completed'] as ItemStatus[]).map((s) => {
+                                const cfg = getStatusConfig(s);
+                                return (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() => {
+                                      onUpdateItemStatus(item.id, s);
+                                      setActiveStatusAnchor(null);
+                                    }}
+                                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
+                                      item.status === s ? 'font-semibold bg-[#27272a]' : ''
+                                    }`}
+                                  >
+                                    <span className={`w-2 h-2 rounded-full ${cfg.dotBg}`} />
+                                    <span className={item.status === s ? cfg.textColor : 'text-[#f4f4f5]'}>
+                                      {cfg.label}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </PortalMenu>
                           </div>
                         </div>
                       </div>

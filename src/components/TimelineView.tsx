@@ -557,10 +557,23 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   const yearEndMs = new Date(currentYear, 11, 31, 23, 59, 59, 999).getTime();
   const totalYearMs = yearEndMs - yearStartMs;
 
-  // Helper to filter items if user selected a person
+  const selectedProjectIds = useMemo(() => {
+    if (!currentProjectId || currentProjectId === 'all') return [];
+    return currentProjectId.split(',').filter(Boolean);
+  }, [currentProjectId]);
+
+  const selectedPersonIds = useMemo(() => {
+    if (!selectedPersonId || selectedPersonId === 'all') return [];
+    return selectedPersonId.split(',').filter(Boolean);
+  }, [selectedPersonId]);
+
+  // Helper to filter items if user selected one or more persons
   const matchesPerson = (item: ItemNode): boolean => {
-    if (!selectedPersonId || selectedPersonId === 'all') return true;
-    if (item.assigneeId === selectedPersonId || item.reviewerId === selectedPersonId) return true;
+    if (selectedPersonIds.length === 0) return true;
+    const hasPerson =
+      (item.assigneeId && selectedPersonIds.includes(item.assigneeId)) ||
+      (item.reviewerId && selectedPersonIds.includes(item.reviewerId));
+    if (hasPerson) return true;
     if (item.subItems) {
       return item.subItems.some((child) => matchesPerson(child));
     }
@@ -570,7 +583,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   // Helper to filter items based on showCompleted and selected person
   const filterProjectFlatItems = (items: { item: ItemNode; depth: number }[]) => {
     let res = items;
-    if (selectedPersonId && selectedPersonId !== 'all') {
+    if (selectedPersonIds.length > 0) {
       res = res.filter(({ item }) => matchesPerson(item));
     }
     if (!showCompleted) {
@@ -853,10 +866,10 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
 
   // Filtered projects by Project Filter, Person Filter, and Search
   const filteredProjects = activeProjects.filter((project) => {
-    if (currentProjectId !== 'all' && project.id !== currentProjectId) {
+    if (selectedProjectIds.length > 0 && !selectedProjectIds.includes(project.id)) {
       return false;
     }
-    if (selectedPersonId && selectedPersonId !== 'all') {
+    if (selectedPersonIds.length > 0) {
       const hasMatchingPerson = (project.items || []).some((item) => matchesPerson(item));
       if (!hasMatchingPerson) return false;
     }

@@ -197,22 +197,54 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
   const [activeEmojiAnchor, setActiveEmojiAnchor] = useState<MenuAnchorState | null>(null);
   const [activeProjectEmojiAnchor, setActiveProjectEmojiAnchor] = useState<MenuAnchorState | null>(null);
 
-  // Filter projects by selected project ID
+  const selectedProjectIds = useMemo(() => {
+    if (!selectedProjectId || selectedProjectId === 'all') return [];
+    return selectedProjectId.split(',').filter(Boolean);
+  }, [selectedProjectId]);
+
+  const selectedPersonIds = useMemo(() => {
+    if (!selectedPersonId || selectedPersonId === 'all') return [];
+    return selectedPersonId.split(',').filter(Boolean);
+  }, [selectedPersonId]);
+
+  // Filter projects by selected project IDs and person IDs
   const displayedProjects = useMemo(() => {
-    if (!selectedProjectId || selectedProjectId === 'all') {
-      return appData.projects.filter((p) => p.status === 'active');
-    }
-    return appData.projects.filter((p) => p.id === selectedProjectId && p.status === 'active');
-  }, [appData.projects, selectedProjectId]);
+    const activeProjects = appData.projects.filter((p) => p.status === 'active');
+    return activeProjects.filter((project) => {
+      if (selectedProjectIds.length > 0 && !selectedProjectIds.includes(project.id)) {
+        return false;
+      }
+      if (selectedPersonIds.length > 0) {
+        const hasMatchingPerson = (project.items || []).some((item) => {
+          const matchItem = (node: ItemNode): boolean => {
+            const matches =
+              (node.assigneeId && selectedPersonIds.includes(node.assigneeId)) ||
+              (node.reviewerId && selectedPersonIds.includes(node.reviewerId));
+            if (matches) return true;
+            return (node.subItems || []).some(matchItem);
+          };
+          return matchItem(item);
+        });
+        if (!hasMatchingPerson) return false;
+      }
+      return true;
+    });
+  }, [appData.projects, selectedProjectIds, selectedPersonIds]);
 
   // Check if item matches search and person filter
   const itemMatchesFilter = (item: ItemNode): boolean => {
     // Person filter
-    if (selectedPersonId && selectedPersonId !== 'all') {
-      const matchesSelf = item.assigneeId === selectedPersonId || item.reviewerId === selectedPersonId;
+    if (selectedPersonIds.length > 0) {
+      const matchesSelf =
+        (item.assigneeId && selectedPersonIds.includes(item.assigneeId)) ||
+        (item.reviewerId && selectedPersonIds.includes(item.reviewerId));
       if (!matchesSelf) {
         const hasMatchingChild = (node: ItemNode): boolean => {
-          if (node.assigneeId === selectedPersonId || node.reviewerId === selectedPersonId) return true;
+          if (
+            (node.assigneeId && selectedPersonIds.includes(node.assigneeId)) ||
+            (node.reviewerId && selectedPersonIds.includes(node.reviewerId))
+          )
+            return true;
           return (node.subItems || []).some(hasMatchingChild);
         };
         if (!hasMatchingChild(item)) return false;

@@ -278,13 +278,9 @@ export const TreeView: React.FC<TreeViewProps> = ({
   const renderStatusBadge = (status: ItemStatus) => {
     const config = getStatusConfig(status);
     return (
-      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border ${config.badgeBorder} ${config.badgeBg} ${config.textColor} text-[10px] font-mono font-bold uppercase tracking-wider`}>
-        {status === 'completed' ? (
-          <Check className="w-3 h-3 text-[#10b981] shrink-0" />
-        ) : (
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${config.dotBg}`} />
-        )}
-        <span>{config.label}</span>
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${config.badgeBorder} ${config.badgeBg} ${config.textColor}`}>
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${config.dotBg}`} />
+        <span className="capitalize whitespace-nowrap">{config.label}</span>
       </span>
     );
   };
@@ -300,10 +296,23 @@ export const TreeView: React.FC<TreeViewProps> = ({
     return false;
   };
 
-  // Helper to filter items if user selected a person
+  const selectedProjectIds = useMemo(() => {
+    if (!currentProjectFilter || currentProjectFilter === 'all') return [];
+    return currentProjectFilter.split(',').filter(Boolean);
+  }, [currentProjectFilter]);
+
+  const selectedPersonIds = useMemo(() => {
+    if (!selectedPersonId || selectedPersonId === 'all') return [];
+    return selectedPersonId.split(',').filter(Boolean);
+  }, [selectedPersonId]);
+
+  // Helper to filter items if user selected one or more persons
   const matchesPerson = (item: ItemNode): boolean => {
-    if (!selectedPersonId || selectedPersonId === 'all') return true;
-    if (item.assigneeId === selectedPersonId || item.reviewerId === selectedPersonId) return true;
+    if (selectedPersonIds.length === 0) return true;
+    const hasPerson =
+      (item.assigneeId && selectedPersonIds.includes(item.assigneeId)) ||
+      (item.reviewerId && selectedPersonIds.includes(item.reviewerId));
+    if (hasPerson) return true;
     if (item.subItems) {
       return item.subItems.some((child) => matchesPerson(child));
     }
@@ -312,10 +321,10 @@ export const TreeView: React.FC<TreeViewProps> = ({
 
   // Filter projects by Project Filter dropdown, Person Filter, and Search
   const filteredProjects = activeProjects.filter((project) => {
-    if (currentProjectFilter !== 'all' && project.id !== currentProjectFilter) {
+    if (selectedProjectIds.length > 0 && !selectedProjectIds.includes(project.id)) {
       return false;
     }
-    if (selectedPersonId && selectedPersonId !== 'all') {
+    if (selectedPersonIds.length > 0) {
       const hasMatchingPerson = (project.items || []).some((item) => matchesPerson(item));
       if (!hasMatchingPerson) return false;
     }
@@ -342,7 +351,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
   ) => {
     if (!parentExpanded) return null;
     if (searchQuery && !matchesSearch(item)) return null;
-    if (selectedPersonId && selectedPersonId !== 'all' && !matchesPerson(item)) return null;
+    if (selectedPersonIds.length > 0 && !matchesPerson(item)) return null;
 
     const isExpanded = item.isExpanded !== false;
     const hasChildren = item.subItems && item.subItems.length > 0;
@@ -532,19 +541,27 @@ export const TreeView: React.FC<TreeViewProps> = ({
               align="left"
               className="w-36 flex flex-col gap-0.5"
             >
-              {(['not-started', 'in-progress', 'review', 'completed'] as ItemStatus[]).map((st) => (
-                <button
-                  key={st}
-                  type="button"
-                  onClick={() => {
-                    onUpdateItemStatus(item.id, st);
-                    setActiveStatusAnchor(null);
-                  }}
-                  className="w-full text-left px-2 py-1.5 text-[11px] rounded hover:bg-[#27272a] transition-colors flex items-center gap-2 cursor-pointer"
-                >
-                  {renderStatusBadge(st)}
-                </button>
-              ))}
+              {(['not-started', 'in-progress', 'review', 'completed'] as ItemStatus[]).map((s) => {
+                const cfg = getStatusConfig(s);
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      onUpdateItemStatus(item.id, s);
+                      setActiveStatusAnchor(null);
+                    }}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
+                      item.status === s ? 'font-semibold bg-[#27272a]' : ''
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${cfg.dotBg}`} />
+                    <span className={item.status === s ? cfg.textColor : 'text-[#f4f4f5]'}>
+                      {cfg.label}
+                    </span>
+                  </button>
+                );
+              })}
             </PortalMenu>
           </div>
 

@@ -1029,7 +1029,14 @@ function WorkspaceApp() {
         initialItem={editingItem}
         initialTargetDate={targetInitialDate}
         parentItemId={targetParentItemId}
-        currentProjectId={targetProjectId || selectedProjectId}
+        currentProjectId={
+          targetProjectId ||
+          (selectedProjectId && selectedProjectId !== 'all'
+            ? selectedProjectId.includes(',')
+              ? selectedProjectId.split(',')[0]
+              : selectedProjectId
+            : '')
+        }
         projects={appData.projects.filter((p) => p.status === 'active')}
         persons={appData.persons}
       />

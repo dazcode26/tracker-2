@@ -218,7 +218,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
       setSelectedParentId(parentItemId || 'root');
       const validTargetProjId =
         currentProjectId && currentProjectId !== 'all'
-          ? currentProjectId
+          ? (currentProjectId.includes(',') ? currentProjectId.split(',')[0] : currentProjectId)
           : (projects[0]?.id || '');
       setSelectedTargetProjectId(validTargetProjId);
     }

@@ -181,14 +181,24 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
     setPickerDate(new Date(currentDate));
   }, [currentDate]);
 
+  const selectedProjectIds = useMemo(() => {
+    if (!selectedProjectId || selectedProjectId === 'all') return [];
+    return selectedProjectId.split(',').filter(Boolean);
+  }, [selectedProjectId]);
+
+  const selectedPersonIds = useMemo(() => {
+    if (!selectedPersonId || selectedPersonId === 'all') return [];
+    return selectedPersonId.split(',').filter(Boolean);
+  }, [selectedPersonId]);
+
   // Project filtering
   const activeProjects = useMemo(() => {
     const active = appData.projects.filter((p) => p.status === 'active');
-    if (selectedProjectId && selectedProjectId !== 'all') {
-      return active.filter((p) => p.id === selectedProjectId);
+    if (selectedProjectIds.length > 0) {
+      return active.filter((p) => selectedProjectIds.includes(p.id));
     }
     return active;
-  }, [appData.projects, selectedProjectId]);
+  }, [appData.projects, selectedProjectIds]);
 
   // Navigation handlers
   const handleToday = () => {
@@ -375,15 +385,13 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
 
     // Person filter helper matching TreeView / CalendarView recursive logic
     const matchesPerson = (node: ItemNode): boolean => {
-      if (!selectedPersonId || selectedPersonId === 'all') return true;
-      if (
-        node.assigneeId === selectedPersonId ||
-        node.reviewerId === selectedPersonId ||
-        node.assigneeId?.toLowerCase() === selectedPersonId.toLowerCase() ||
-        node.reviewerId?.toLowerCase() === selectedPersonId.toLowerCase()
-      ) {
-        return true;
-      }
+      if (selectedPersonIds.length === 0) return true;
+      const hasPerson =
+        (node.assigneeId && selectedPersonIds.includes(node.assigneeId)) ||
+        (node.reviewerId && selectedPersonIds.includes(node.reviewerId)) ||
+        (node.assigneeId && selectedPersonIds.some((id) => id.toLowerCase() === node.assigneeId?.toLowerCase())) ||
+        (node.reviewerId && selectedPersonIds.some((id) => id.toLowerCase() === node.reviewerId?.toLowerCase()));
+      if (hasPerson) return true;
       if (node.subItems && node.subItems.length > 0) {
         return node.subItems.some((child) => matchesPerson(child));
       }
@@ -406,7 +414,7 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
       }
 
       // Person filter check (supports parent or subItem matching)
-      if (selectedPersonId && selectedPersonId !== 'all') {
+      if (selectedPersonIds.length > 0) {
         if (!matchesPerson(item)) return;
       }
 
