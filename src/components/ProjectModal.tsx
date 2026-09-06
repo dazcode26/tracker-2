@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { X, FolderPlus, Archive, Copy } from 'lucide-react';
 import { ProjectNode, ProjectStatus } from '../types';
 
+const PROJECT_EMOJIS = ['🌳', '📁', '💻', '🎬', '📄', '📝', '⚡', '🚀', '🎯', '✨', '🔥', '📌', '🎨', '⚙️', '💡', '🏷️'];
+
 interface ProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSaveProject: (title: string, color: string, status?: ProjectStatus) => void;
+  onSaveProject: (title: string, color: string, status?: ProjectStatus, icon?: string, description?: string) => void;
   onArchiveProject?: (projectId: string) => void;
   onDuplicateProject?: (projectId: string) => void;
   initialProject?: ProjectNode | null;
@@ -21,7 +23,9 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 }) => {
   const [title, setTitle] = useState<string>('');
   const [color, setColor] = useState<string>('#f97316');
+  const [icon, setIcon] = useState<string>('🌳');
   const [status, setStatus] = useState<ProjectStatus>('active');
+  const [description, setDescription] = useState<string>('');
 
   const isEditing = Boolean(initialProject && typeof initialProject === 'object' && 'id' in initialProject && typeof initialProject.id === 'string');
 
@@ -30,21 +34,25 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       if (isEditing && initialProject) {
         setTitle(initialProject.title || '');
         setColor(initialProject.color || '#f97316');
+        setIcon(initialProject.icon || '🌳');
         setStatus(initialProject.status || 'active');
+        setDescription(initialProject.description || '');
       } else {
         setTitle('');
         setColor('#f97316');
+        setIcon('🌳');
         setStatus('active');
+        setDescription('');
       }
     }
-  }, [isOpen, isEditing, initialProject?.id]);
+  }, [isOpen, isEditing, initialProject?.id, initialProject?.icon, initialProject?.description]);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onSaveProject(title, color, status);
+    onSaveProject(title, color, status, icon, description);
     onClose();
   };
 
@@ -91,6 +99,35 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               required
               autoFocus
             />
+          </div>
+
+          <div>
+            <label className="block text-[#a1a1aa] mb-1 font-mono uppercase">Project Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief summary or scope of this project..."
+              rows={3}
+              className="w-full bg-[#18181b] border border-[#27272a] rounded-lg p-2.5 text-[#f4f4f5] outline-none focus:border-orange-500 text-xs placeholder-[#71717a] resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[#a1a1aa] mb-2 font-mono uppercase">Project Icon</label>
+            <div className="flex flex-wrap items-center gap-1.5 p-2 bg-[#18181b] border border-[#27272a] rounded-xl">
+              {PROJECT_EMOJIS.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => setIcon(e)}
+                  className={`w-8 h-8 flex items-center justify-center rounded-lg text-lg cursor-pointer transition-all ${
+                    icon === e ? 'bg-orange-500/20 border border-orange-500/50 scale-110' : 'hover:bg-[#27272a]'
+                  }`}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div>

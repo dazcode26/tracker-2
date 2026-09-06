@@ -1071,7 +1071,7 @@ export function getRealizationDatesForProject(project: ProjectNode): { minDate: 
 
 /**
  * Formats realization start and end date range for display next to Timer.
- * Example: "1 Aug 2026 - 2 Aug 2026" or "1 Aug 2026"
+ * Example: "24/08/2026 - 27/08/2026" or "24/08/2026"
  */
 export function formatStartEndDateRange(item: ItemNode): string {
   const { minDate, maxDate } = getRealizationDatesForTree(item);
@@ -1081,7 +1081,10 @@ export function formatStartEndDateRange(item: ItemNode): string {
   }
 
   const formatDate = (d: Date): string => {
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   const minStr = formatDate(minDate);

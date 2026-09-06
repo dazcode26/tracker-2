@@ -50,6 +50,7 @@ export interface ProjectNode {
   title: string;
   status: ProjectStatus;
   color?: string;
+  icon?: string;
   description?: string;
   isExpanded?: boolean;
   actualStartDate?: string | null;

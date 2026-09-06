@@ -23,6 +23,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { StructureToolbar } from './StructureToolbar';
+import { PortalMenu } from './PortalMenu';
 import { AppData, ItemNode, ProjectNode, ItemStatus, Person } from '../types';
 import {
   updateItemInProjects,
@@ -136,9 +137,8 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
   onSearchChange,
   onOpenProjectModal,
 }) => {
-  // Page Icon & Header State
-  const [pageEmoji, setPageEmoji] = useState<string>('🌳');
-  const [showPageEmojiPicker, setShowPageEmojiPicker] = useState(false);
+  // Project Emoji Popover State
+  const [activeProjectEmojiPickerId, setActiveProjectEmojiPickerId] = useState<string | null>(null);
 
   // Sorting State (persisted in localStorage like TreeView)
   const [sortBy, setSortBy] = useState<TreeSortBy>(() => {
@@ -184,29 +184,18 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
   const [editingDescriptionProjectId, setEditingDescriptionProjectId] = useState<string | null>(null);
   const [inlineDescriptionValue, setInlineDescriptionValue] = useState('');
 
-  // Dropdown Popovers
-  const [activeStatusMenuId, setActiveStatusMenuId] = useState<string | null>(null);
-  const [activeProgressMenuId, setActiveProgressMenuId] = useState<string | null>(null);
-  const [activeAssigneeMenuId, setActiveAssigneeMenuId] = useState<string | null>(null);
-  const [activeMoreMenuId, setActiveMoreMenuId] = useState<string | null>(null);
-  const [activeEmojiPickerItemId, setActiveEmojiPickerItemId] = useState<string | null>(null);
-
-  // Close menus on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('[data-popover-root]')) {
-        setActiveStatusMenuId(null);
-        setActiveProgressMenuId(null);
-        setActiveAssigneeMenuId(null);
-        setActiveMoreMenuId(null);
-        setActiveEmojiPickerItemId(null);
-        setShowPageEmojiPicker(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  // Dropdown Popovers using Portal to completely prevent container clipping
+  interface MenuAnchorState {
+    id: string;
+    rect: DOMRect;
+    el: HTMLElement;
+  }
+  const [activeStatusAnchor, setActiveStatusAnchor] = useState<MenuAnchorState | null>(null);
+  const [activeProgressAnchor, setActiveProgressAnchor] = useState<MenuAnchorState | null>(null);
+  const [activeAssigneeAnchor, setActiveAssigneeAnchor] = useState<MenuAnchorState | null>(null);
+  const [activeMoreAnchor, setActiveMoreAnchor] = useState<MenuAnchorState | null>(null);
+  const [activeEmojiAnchor, setActiveEmojiAnchor] = useState<MenuAnchorState | null>(null);
+  const [activeProjectEmojiAnchor, setActiveProjectEmojiAnchor] = useState<MenuAnchorState | null>(null);
 
   // Filter projects by selected project ID
   const displayedProjects = useMemo(() => {
@@ -334,7 +323,7 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
       subItems: item.subItems ? recursivelyUpdateStatus(item.subItems, targetStatus) : [],
     }));
     onSaveData({ ...appData, projects: updatedProjects });
-    setActiveProgressMenuId(null);
+    setActiveProgressAnchor(null);
   };
 
   // Update Item Assignee
@@ -344,7 +333,7 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
       assigneeId,
     }));
     onSaveData({ ...appData, projects: updatedProjects });
-    setActiveAssigneeMenuId(null);
+    setActiveAssigneeAnchor(null);
   };
 
   // Update Item Custom Emoji Icon
@@ -354,7 +343,16 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
       icon: emoji,
     }));
     onSaveData({ ...appData, projects: updatedProjects });
-    setActiveEmojiPickerItemId(null);
+    setActiveEmojiAnchor(null);
+  };
+
+  // Update Project Custom Emoji Icon
+  const handleSetProjectEmoji = (projectId: string, emoji: string) => {
+    const updatedProjects = appData.projects.map((p) =>
+      p.id === projectId ? { ...p, icon: emoji } : p
+    );
+    onSaveData({ ...appData, projects: updatedProjects });
+    setActiveProjectEmojiAnchor(null);
   };
 
   // Render individual task row
@@ -379,13 +377,18 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
     const dateRangeStr = formatStartEndDateRange(item);
     const dateInfo = formatDaysLeft(item.targetDate);
     const isCompleted = item.status === 'completed';
+    const statusCfg = getStatusConfig(item.status);
 
     return (
       <React.Fragment key={item.id}>
-        <div className="group flex items-center border-b border-[#ECECEB] hover:bg-[#F9F9F8] transition-colors text-sm text-[#37352F] select-none min-h-[40px] relative">
+        <div
+          className={`group flex items-center border-b border-[#27272a] hover:bg-[#18181b]/70 transition-colors text-sm text-[#f4f4f5] select-none min-h-[40px] relative ${
+            isTimerRunning ? 'bg-orange-500/10' : ''
+          }`}
+        >
           {/* Column 1: NAME (Tree Indent + Chevron + Icon + Name + Action Buttons: OPEN & + Sub-item) */}
           <div
-            className="flex-1 flex items-center min-w-[280px] sm:min-w-[360px] py-2 pr-2 relative"
+            className="flex-1 flex items-center min-w-[250px] xl:min-w-[280px] 2xl:min-w-[340px] py-2 pr-2 xl:pr-4 relative"
             style={{ paddingLeft: `${Math.max(4, depth * 22 + 6)}px` }}
           >
             {/* Guide Lines for nested items */}
@@ -394,8 +397,8 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                 className="absolute top-0 bottom-0 pointer-events-none"
                 style={{ left: `${(depth - 1) * 22 + 14}px` }}
               >
-                <div className="w-[1px] h-full bg-[#E0E0DE]" />
-                <div className="absolute top-[19px] left-0 w-2.5 h-[1px] bg-[#E0E0DE]" />
+                <div className="w-[1px] h-full bg-[#27272a]" />
+                <div className="absolute top-[19px] left-0 w-2.5 h-[1px] bg-[#27272a]" />
               </div>
             )}
 
@@ -405,17 +408,17 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                 <button
                   type="button"
                   onClick={() => onToggleExpand(item.id)}
-                  className="w-4 h-4 rounded flex items-center justify-center text-[#787774] hover:text-[#37352F] hover:bg-[#E9E9E7] transition-all cursor-pointer"
+                  className="w-4 h-4 rounded flex items-center justify-center text-[#71717a] hover:text-[#f4f4f5] hover:bg-[#27272a] transition-all cursor-pointer"
                   title={isExpanded ? 'Collapse sub-tasks' : 'Expand sub-tasks'}
                 >
                   <ChevronRight
                     className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                      isExpanded ? 'rotate-90 text-[#37352F]' : ''
+                      isExpanded ? 'rotate-90 text-[#f4f4f5]' : ''
                     }`}
                   />
                 </button>
               ) : (
-                <span className="w-1.5 h-1.5 rounded-full bg-[#D6D6D4] inline-block" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#3f3f46] inline-block" />
               )}
             </div>
 
@@ -423,9 +426,14 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
             <div className="relative shrink-0 mr-2" data-popover-root>
               <button
                 type="button"
-                onClick={() =>
-                  setActiveEmojiPickerItemId(activeEmojiPickerItemId === item.id ? null : item.id)
-                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveEmojiAnchor(
+                    activeEmojiAnchor?.id === item.id
+                      ? null
+                      : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                  );
+                }}
                 className="text-base hover:scale-110 transition-transform p-0.5 rounded cursor-pointer select-none"
                 title="Change icon"
               >
@@ -433,40 +441,48 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
               </button>
 
               {/* Emoji Picker Popover */}
-              {activeEmojiPickerItemId === item.id && (
-                <div className="absolute left-0 top-7 z-50 bg-[#FFFFFF] border border-[#E9E9E7] rounded-xl shadow-xl p-2.5 grid grid-cols-4 gap-1.5 w-44 animate-in fade-in">
-                  {NOTION_EMOJIS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      onClick={() => handleSetItemEmoji(item.id, emoji)}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#F1F1EF] text-lg cursor-pointer transition-colors"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <PortalMenu
+                isOpen={activeEmojiAnchor?.id === item.id}
+                onClose={() => setActiveEmojiAnchor(null)}
+                anchorRect={activeEmojiAnchor?.id === item.id ? activeEmojiAnchor.rect : null}
+                triggerElement={activeEmojiAnchor?.id === item.id ? activeEmojiAnchor.el : null}
+                align="left"
+                className="w-44 p-2.5 grid grid-cols-4 gap-1.5"
+              >
+                {NOTION_EMOJIS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => {
+                      handleSetItemEmoji(item.id, emoji);
+                      setActiveEmojiAnchor(null);
+                    }}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#27272a] text-lg cursor-pointer transition-colors"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </PortalMenu>
             </div>
 
             {/* Item Title */}
             <span
               onClick={() => onOpenEditItemModal(item)}
-              className={`font-medium truncate max-w-[200px] sm:max-w-[320px] hover:underline cursor-pointer ${
-                isCompleted ? 'line-through text-[#9B9A97]' : 'text-[#37352F]'
+              className={`font-medium truncate flex-1 min-w-0 hover:underline cursor-pointer ${
+                isCompleted ? 'line-through text-[#71717a]' : 'text-[#f4f4f5]'
               }`}
               title={item.name}
             >
               {item.name}
             </span>
 
-            {/* ACTION BUTTONS ON THE RIGHT OF TASK NAME: OPEN & + SUB-ITEM */}
-            <div className="flex items-center gap-1 ml-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* ACTION BUTTONS ON THE RIGHT OF TASK NAME: OPEN & + SUB-ITEM (Shown on hover) */}
+            <div className="hidden group-hover:flex items-center gap-1 ml-2 shrink-0 animate-in fade-in">
               {/* OPEN button */}
               <button
                 type="button"
                 onClick={() => onOpenEditItemModal(item)}
-                className="px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-[#787774] hover:text-[#37352F] hover:bg-[#E9E9E7] rounded transition-colors uppercase cursor-pointer"
+                className="px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] rounded transition-colors uppercase cursor-pointer border border-transparent hover:border-[#3f3f46]"
                 title="Open task details (side-peek)"
               >
                 OPEN
@@ -479,7 +495,7 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                   setInlineSubItemParentId(item.id);
                   setInlineSubItemName('');
                 }}
-                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-[#787774] hover:text-[#37352F] hover:bg-[#E9E9E7] rounded transition-colors cursor-pointer"
+                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] rounded transition-colors cursor-pointer border border-transparent hover:border-[#3f3f46]"
                 title="Add sub-item"
               >
                 <Plus className="w-3 h-3" />
@@ -489,7 +505,7 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
 
             {/* Timer active badge indicator */}
             {isTimerRunning && (
-              <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-orange-100 text-orange-800 font-mono flex items-center gap-1 animate-pulse shrink-0">
+              <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-orange-500/20 text-orange-400 font-mono flex items-center gap-1 animate-pulse shrink-0 border border-orange-500/30">
                 <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
                 Active
               </span>
@@ -497,167 +513,169 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
           </div>
 
           {/* Column 2: STATUS */}
-          <div className="w-28 sm:w-32 px-2 shrink-0 relative" data-popover-root>
+          <div className="w-28 xl:w-36 2xl:w-40 px-2 xl:px-3 shrink-0 relative" data-popover-root>
             <button
               type="button"
-              onClick={() =>
-                setActiveStatusMenuId(activeStatusMenuId === item.id ? null : item.id)
-              }
-              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:opacity-85 ${
-                item.status === 'completed'
-                  ? 'bg-[#EBF5F0] text-[#0F7B6C]'
-                  : item.status === 'in-progress'
-                  ? 'bg-[#EBF3FA] text-[#2383E2]'
-                  : item.status === 'review'
-                  ? 'bg-[#FAECE0] text-[#D9730D]'
-                  : 'bg-[#F1F1EF] text-[#787774]'
-              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveStatusAnchor(
+                  activeStatusAnchor?.id === item.id
+                    ? null
+                    : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                );
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:opacity-85 border ${statusCfg.badgeBorder} ${statusCfg.badgeBg} ${statusCfg.textColor}`}
             >
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  item.status === 'completed'
-                    ? 'bg-[#0F7B6C]'
-                    : item.status === 'in-progress'
-                    ? 'bg-[#2383E2]'
-                    : item.status === 'review'
-                    ? 'bg-[#D9730D]'
-                    : 'bg-[#9B9A97]'
-                }`}
-              />
-              <span className="capitalize whitespace-nowrap">
-                {item.status === 'completed'
-                  ? 'Done'
-                  : item.status === 'in-progress'
-                  ? 'In progress'
-                  : item.status === 'review'
-                  ? 'In review'
-                  : 'Not started'}
-              </span>
+              <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotBg}`} />
+              <span className="capitalize whitespace-nowrap">{statusCfg.label}</span>
             </button>
 
             {/* Status Dropdown Popover */}
-            {activeStatusMenuId === item.id && (
-              <div className="absolute left-2 top-8 z-50 bg-[#FFFFFF] border border-[#E9E9E7] rounded-xl shadow-xl p-1.5 w-36 animate-in fade-in flex flex-col gap-0.5">
-                {[
-                  { key: 'not-started', label: 'Not started', color: 'bg-[#9B9A97]' },
-                  { key: 'in-progress', label: 'In progress', color: 'bg-[#2383E2]' },
-                  { key: 'review', label: 'In review', color: 'bg-[#D9730D]' },
-                  { key: 'completed', label: 'Done', color: 'bg-[#0F7B6C]' },
-                ].map((s) => (
+            <PortalMenu
+              isOpen={activeStatusAnchor?.id === item.id}
+              onClose={() => setActiveStatusAnchor(null)}
+              anchorRect={activeStatusAnchor?.id === item.id ? activeStatusAnchor.rect : null}
+              triggerElement={activeStatusAnchor?.id === item.id ? activeStatusAnchor.el : null}
+              align="left"
+              className="w-36 flex flex-col gap-0.5"
+            >
+              {(['not-started', 'in-progress', 'review', 'completed'] as ItemStatus[]).map((s) => {
+                const cfg = getStatusConfig(s);
+                return (
                   <button
-                    key={s.key}
+                    key={s}
                     type="button"
                     onClick={() => {
-                      onUpdateItemStatus(item.id, s.key as ItemStatus);
-                      setActiveStatusMenuId(null);
+                      onUpdateItemStatus(item.id, s);
+                      setActiveStatusAnchor(null);
                     }}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#F1F1EF] text-[#37352F] cursor-pointer text-left ${
-                      item.status === s.key ? 'font-semibold bg-[#F1F1EF]' : ''
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
+                      item.status === s ? 'font-semibold bg-[#27272a]' : ''
                     }`}
                   >
-                    <span className={`w-2 h-2 rounded-full ${s.color}`} />
-                    <span>{s.label}</span>
+                    <span className={`w-2 h-2 rounded-full ${cfg.dotBg}`} />
+                    <span className={item.status === s ? cfg.textColor : 'text-[#f4f4f5]'}>
+                      {cfg.label}
+                    </span>
                   </button>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </PortalMenu>
           </div>
 
-          {/* Column 3: PROGRESS (Interactive Roll-up & Quick Actions) */}
-          <div className="w-28 sm:w-32 px-2 shrink-0 relative" data-popover-root>
+          {/* Column 3: PROGRESS (Interactive Roll-up & Quick Actions, +10px on wide screen) */}
+          <div className="w-24 xl:w-[106px] 2xl:w-32 px-2 xl:px-3 shrink-0 relative" data-popover-root>
             <button
               type="button"
-              onClick={() => {
+              onClick={(e) => {
                 if (progress.isLeaf) {
                   // Direct toggle for leaf item
                   onUpdateItemStatus(item.id, isCompleted ? 'not-started' : 'completed');
                 } else {
-                  setActiveProgressMenuId(activeProgressMenuId === item.id ? null : item.id);
+                  e.stopPropagation();
+                  setActiveProgressAnchor(
+                    activeProgressAnchor?.id === item.id
+                      ? null
+                      : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                  );
                 }
               }}
-              className="w-full flex items-center gap-2 hover:bg-[#F1F1EF] p-1 rounded-md transition-colors cursor-pointer group/prog"
+              className="w-full flex items-center gap-2 hover:bg-[#27272a]/60 p-1 rounded-md transition-colors cursor-pointer group/prog"
               title={
                 progress.isLeaf
                   ? `Click to toggle completion (${progress.percentage}%)`
                   : `Click to view breakdown (${progress.completed}/${progress.total} sub-tasks completed)`
               }
             >
-              <div className="flex-1 bg-[#E9E9E7] h-1.5 rounded-full overflow-hidden">
+              <div className="flex-1 bg-[#27272a] h-1.5 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-300 ${
                     progress.percentage === 100
-                      ? 'bg-[#0F7B6C]'
+                      ? 'bg-emerald-500'
                       : progress.percentage > 0
-                      ? 'bg-[#2383E2]'
+                      ? 'bg-orange-500'
                       : 'bg-transparent'
                   }`}
                   style={{ width: `${progress.percentage}%` }}
                 />
               </div>
-              <span className="text-[11px] font-mono text-[#787774] group-hover/prog:text-[#37352F] font-medium shrink-0">
+              <span className="text-[11px] font-mono text-[#a1a1aa] group-hover/prog:text-[#f4f4f5] font-medium shrink-0">
                 {progress.percentage}%
               </span>
             </button>
 
             {/* Interactive Progress Popover for Parent Items */}
-            {activeProgressMenuId === item.id && !progress.isLeaf && (
-              <div className="absolute left-0 top-8 z-50 bg-[#FFFFFF] border border-[#E9E9E7] rounded-xl shadow-xl p-3 w-56 animate-in fade-in flex flex-col gap-2">
-                <div className="text-xs font-semibold text-[#37352F] flex items-center justify-between">
+            {!progress.isLeaf && (
+              <PortalMenu
+                isOpen={activeProgressAnchor?.id === item.id}
+                onClose={() => setActiveProgressAnchor(null)}
+                anchorRect={activeProgressAnchor?.id === item.id ? activeProgressAnchor.rect : null}
+                triggerElement={activeProgressAnchor?.id === item.id ? activeProgressAnchor.el : null}
+                align="left"
+                className="w-56 p-3 flex flex-col gap-2"
+              >
+                <div className="text-xs font-semibold text-[#f4f4f5] flex items-center justify-between">
                   <span>Sub-items Rollup</span>
-                  <span className="font-mono text-[#0F7B6C]">{progress.percentage}%</span>
+                  <span className="font-mono text-emerald-400">{progress.percentage}%</span>
                 </div>
-                <p className="text-[11px] text-[#787774]">
+                <p className="text-[11px] text-[#a1a1aa]">
                   {progress.completed} of {progress.total} subordinate work items completed.
                 </p>
 
-                <div className="flex-1 bg-[#E9E9E7] h-2 rounded-full overflow-hidden">
+                <div className="flex-1 bg-[#27272a] h-2 rounded-full overflow-hidden">
                   <div
-                    className="bg-[#0F7B6C] h-full rounded-full transition-all duration-300"
+                    className="bg-emerald-500 h-full rounded-full transition-all duration-300"
                     style={{ width: `${progress.percentage}%` }}
                   />
                 </div>
 
-                <div className="border-t border-[#E9E9E7] pt-2 flex flex-col gap-1">
+                <div className="border-t border-[#27272a] pt-2 flex flex-col gap-1">
                   <button
                     type="button"
-                    onClick={() => handleBulkUpdateStatus(item.id, 'completed')}
-                    className="text-left px-2 py-1 text-xs text-[#0F7B6C] hover:bg-[#EBF5F0] rounded font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                    onClick={() => {
+                      handleBulkUpdateStatus(item.id, 'completed');
+                      setActiveProgressAnchor(null);
+                    }}
+                    className="text-left px-2 py-1 text-xs text-emerald-400 hover:bg-emerald-500/15 rounded font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Check className="w-3.5 h-3.5" />
                     <span>Mark all sub-tasks completed</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleBulkUpdateStatus(item.id, 'not-started')}
-                    className="text-left px-2 py-1 text-xs text-[#787774] hover:bg-[#F1F1EF] rounded flex items-center gap-1.5 transition-colors cursor-pointer"
+                    onClick={() => {
+                      handleBulkUpdateStatus(item.id, 'not-started');
+                      setActiveProgressAnchor(null);
+                    }}
+                    className="text-left px-2 py-1 text-xs text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] rounded flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Circle className="w-3.5 h-3.5" />
                     <span>Reset all to not started</span>
                   </button>
                 </div>
-              </div>
+              </PortalMenu>
             )}
           </div>
 
           {/* Column 4: DATE (Same format as TreeView: Range & Days Left) */}
           <div
             onClick={() => onOpenEditItemModal(item)}
-            className="w-36 sm:w-44 px-2 shrink-0 font-mono text-[11px] cursor-pointer hover:bg-[#F1F1EF] rounded py-1 transition-colors flex flex-col justify-center min-w-0"
+            className="w-[186px] min-w-[186px] xl:w-56 2xl:w-64 px-2 xl:px-4 shrink-0 font-mono text-xs cursor-pointer hover:bg-[#27272a]/50 rounded py-1 transition-colors flex flex-col justify-center min-w-0"
             title={`Realization: ${dateRangeStr || 'None'}\nTarget: ${dateInfo.fullDate}\nClick to edit details`}
           >
             {dateRangeStr ? (
-              <span className="text-[#37352F] font-medium truncate">{dateRangeStr}</span>
+              <span className="text-[#71717a] font-mono whitespace-nowrap truncate">{dateRangeStr}</span>
             ) : (
-              <span className="text-[#9B9A97] italic text-[10px]">-</span>
+              <span className="text-[#71717a] italic text-xs font-mono">-</span>
             )}
             {!isCompleted && item.targetDate && (
               <span
-                className={`truncate ${
+                className={`truncate font-mono text-[11px] ${
                   dateInfo.isOverdue
-                    ? 'text-red-600 font-semibold'
+                    ? 'text-red-400 font-semibold'
                     : dateInfo.text === 'Today'
-                    ? 'text-amber-600 font-semibold'
-                    : 'text-[#787774]'
+                    ? 'text-amber-400 font-semibold'
+                    : 'text-[#71717a]'
                 }`}
               >
                 {dateInfo.text}
@@ -665,30 +683,38 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
             )}
           </div>
 
-          {/* Column 5: TEAM (Assignee & Reviewer) */}
-          <div className="w-28 sm:w-32 px-2 shrink-0 relative" data-popover-root>
+          {/* Column 5: TEAM (Assignee & Reviewer Avatar Only) */}
+          <div className="w-16 xl:w-24 2xl:w-28 px-2 xl:px-3 shrink-0 flex items-center relative" data-popover-root>
             <button
               type="button"
-              onClick={() =>
-                setActiveAssigneeMenuId(activeAssigneeMenuId === item.id ? null : item.id)
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveAssigneeAnchor(
+                  activeAssigneeAnchor?.id === item.id
+                    ? null
+                    : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                );
+              }}
+              className="flex items-center -space-x-1.5 hover:opacity-85 p-0.5 rounded cursor-pointer transition-all"
+              title={
+                assignee
+                  ? `Assignee: ${assignee.name}${reviewer ? `\nReviewer: ${reviewer.name}` : ''}\nClick to change`
+                  : 'Unassigned (click to assign)'
               }
-              className="flex items-center gap-1.5 hover:bg-[#F1F1EF] px-1.5 py-1 rounded cursor-pointer transition-colors max-w-full text-left"
-              title="Change assignee"
             >
               {assignee ? (
-                <>
-                  <img
-                    src={assignee.avatar}
-                    alt={assignee.name}
-                    className="w-5 h-5 rounded-full object-cover border border-[#D6D6D4]"
-                  />
-                  <span className="text-xs text-[#37352F] truncate">{assignee.name}</span>
-                </>
+                <img
+                  src={assignee.avatar}
+                  alt={assignee.name}
+                  className="w-6 h-6 rounded-full object-cover border border-[#27272a] ring-1 ring-white/10 shrink-0"
+                />
               ) : (
-                <span className="text-xs text-[#9B9A97] flex items-center gap-1">
+                <div
+                  className="w-6 h-6 rounded-full bg-[#27272a] border border-[#3f3f46] flex items-center justify-center text-[#71717a] hover:text-[#f4f4f5] transition-colors shrink-0"
+                  title="Click to assign"
+                >
                   <User className="w-3.5 h-3.5" />
-                  <span>Unassigned</span>
-                </span>
+                </div>
               )}
 
               {/* Reviewer indicator if present */}
@@ -696,47 +722,55 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                 <img
                   src={reviewer.avatar}
                   alt={`Reviewer: ${reviewer.name}`}
-                  className="w-4 h-4 rounded-full object-cover border border-amber-400 ring-1 ring-amber-400/50 ml-0.5 shrink-0"
+                  className="w-5 h-5 rounded-full object-cover border border-amber-400 ring-1 ring-amber-400/50 shrink-0"
                   title={`Reviewer: ${reviewer.name}`}
                 />
               )}
             </button>
 
             {/* Assignee Dropdown Popover */}
-            {activeAssigneeMenuId === item.id && (
-              <div className="absolute left-2 top-8 z-50 bg-[#FFFFFF] border border-[#E9E9E7] rounded-xl shadow-xl p-1.5 w-48 animate-in fade-in flex flex-col gap-0.5">
-                <div className="px-2 py-1 text-[10px] uppercase font-bold text-[#9B9A97]">
-                  Assign Team Member
-                </div>
-                {appData.persons.map((person) => (
-                  <button
-                    key={person.id}
-                    type="button"
-                    onClick={() => handleSetAssignee(item.id, person.id)}
-                    className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs hover:bg-[#F1F1EF] text-[#37352F] cursor-pointer text-left ${
-                      item.assigneeId === person.id ? 'font-semibold bg-[#F1F1EF]' : ''
-                    }`}
-                  >
-                    <img
-                      src={person.avatar}
-                      alt={person.name}
-                      className="w-5 h-5 rounded-full object-cover"
-                    />
-                    <div className="flex-1 truncate">
-                      <div className="truncate">{person.name}</div>
-                      <div className="text-[10px] text-[#9B9A97] truncate">{person.role}</div>
-                    </div>
-                  </button>
-                ))}
+            <PortalMenu
+              isOpen={activeAssigneeAnchor?.id === item.id}
+              onClose={() => setActiveAssigneeAnchor(null)}
+              anchorRect={activeAssigneeAnchor?.id === item.id ? activeAssigneeAnchor.rect : null}
+              triggerElement={activeAssigneeAnchor?.id === item.id ? activeAssigneeAnchor.el : null}
+              align="left"
+              className="w-48 flex flex-col gap-0.5"
+            >
+              <div className="px-2 py-1 text-[10px] uppercase font-bold text-[#71717a]">
+                Assign Team Member
               </div>
-            )}
+              {appData.persons.map((person) => (
+                <button
+                  key={person.id}
+                  type="button"
+                  onClick={() => {
+                    handleSetAssignee(item.id, person.id);
+                    setActiveAssigneeAnchor(null);
+                  }}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
+                    item.assigneeId === person.id ? 'font-semibold bg-[#27272a]' : ''
+                  }`}
+                >
+                  <img
+                    src={person.avatar}
+                    alt={person.name}
+                    className="w-5 h-5 rounded-full object-cover"
+                  />
+                  <div className="flex-1 truncate">
+                    <div className="truncate">{person.name}</div>
+                    <div className="text-[10px] text-[#71717a] truncate">{person.role}</div>
+                  </div>
+                </button>
+              ))}
+            </PortalMenu>
           </div>
 
           {/* Column 6: TIMER (Tracked Time & Play/Stop Button) */}
-          <div className="w-24 sm:w-28 px-2 shrink-0 flex items-center justify-end gap-2">
+          <div className="w-24 xl:w-32 2xl:w-36 px-2 xl:px-3 shrink-0 flex items-center justify-end gap-2 xl:gap-3">
             <span
               className={`font-mono text-xs ${
-                isTimerRunning ? 'text-orange-600 font-bold animate-pulse' : 'text-[#787774]'
+                isTimerRunning ? 'text-orange-400 font-bold animate-pulse' : 'text-[#71717a]'
               }`}
             >
               {formattedTime}
@@ -754,7 +788,7 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onStartTimer(item.id)}
-                className="w-6 h-6 rounded-full bg-[#F1F1EF] text-[#787774] hover:text-orange-600 hover:bg-orange-50 transition-colors flex items-center justify-center cursor-pointer"
+                className="w-6 h-6 rounded-full bg-[#27272a] text-[#a1a1aa] hover:text-orange-400 hover:bg-orange-500/20 transition-colors flex items-center justify-center cursor-pointer"
                 title="Start timer for this task"
               >
                 <Play className="w-3 h-3 fill-current ml-0.5" />
@@ -763,119 +797,125 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
           </div>
 
           {/* Column 7: MORE (Options Dropdown) */}
-          <div className="w-12 sm:w-14 px-2 shrink-0 flex items-center justify-center relative" data-popover-root>
+          <div className="w-10 xl:w-14 2xl:w-16 px-1 xl:px-2 shrink-0 flex items-center justify-center relative" data-popover-root>
             <button
               type="button"
-              onClick={() =>
-                setActiveMoreMenuId(activeMoreMenuId === item.id ? null : item.id)
-              }
-              className="w-7 h-7 rounded hover:bg-[#E9E9E7] text-[#787774] hover:text-[#37352F] flex items-center justify-center cursor-pointer transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveMoreAnchor(
+                  activeMoreAnchor?.id === item.id
+                    ? null
+                    : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                );
+              }}
+              className="w-7 h-7 rounded hover:bg-[#27272a] text-[#71717a] hover:text-[#f4f4f5] flex items-center justify-center cursor-pointer transition-colors"
               title="More actions"
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
 
-            {/* Context Menu Dropdown */}
-            {activeMoreMenuId === item.id && (
-              <div
-                className={`absolute right-0 w-44 bg-[#FFFFFF] border border-[#E9E9E7] rounded-xl shadow-2xl z-50 p-1.5 text-xs flex flex-col gap-0.5 animate-in fade-in ${
-                  isLastChild ? 'bottom-8' : 'top-8'
-                }`}
+            {/* Context Menu Dropdown via Portal - Never clipped */}
+            <PortalMenu
+              isOpen={activeMoreAnchor?.id === item.id}
+              onClose={() => setActiveMoreAnchor(null)}
+              anchorRect={activeMoreAnchor?.id === item.id ? activeMoreAnchor.rect : null}
+              triggerElement={activeMoreAnchor?.id === item.id ? activeMoreAnchor.el : null}
+              align="right"
+              className="w-44 flex flex-col gap-0.5"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveMoreAnchor(null);
+                  setInlineSubItemParentId(item.id);
+                  setInlineSubItemName('');
+                }}
+                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#27272a] text-[#f4f4f5] flex items-center gap-2 cursor-pointer transition-colors"
               >
+                <Plus className="w-3.5 h-3.5 text-orange-400" />
+                <span>Add Sub-task</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveMoreAnchor(null);
+                  onOpenEditItemModal(item);
+                }}
+                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#27272a] text-[#f4f4f5] flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <Edit2 className="w-3.5 h-3.5 text-[#71717a]" />
+                <span>Edit Details</span>
+              </button>
+              {onDuplicateItem && (
                 <button
                   type="button"
                   onClick={() => {
-                    setActiveMoreMenuId(null);
-                    setInlineSubItemParentId(item.id);
-                    setInlineSubItemName('');
+                    setActiveMoreAnchor(null);
+                    onDuplicateItem(item.id);
                   }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#F1F1EF] text-[#37352F] flex items-center gap-2 cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#27272a] text-[#f4f4f5] flex items-center gap-2 cursor-pointer transition-colors"
                 >
-                  <Plus className="w-3.5 h-3.5 text-[#37352F]" />
-                  <span>Add Sub-task</span>
+                  <Copy className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Duplicate Task</span>
                 </button>
+              )}
+              {onReorderItem && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveMoreAnchor(null);
+                      onReorderItem(item.id, 'up');
+                    }}
+                    disabled={isFirstChild}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center gap-2 transition-colors ${
+                      isFirstChild
+                        ? 'text-[#71717a] cursor-not-allowed opacity-50'
+                        : 'hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer'
+                    }`}
+                  >
+                    <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Move Up</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveMoreAnchor(null);
+                      onReorderItem(item.id, 'down');
+                    }}
+                    disabled={isLastChild}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center gap-2 transition-colors ${
+                      isLastChild
+                        ? 'text-[#71717a] cursor-not-allowed opacity-50'
+                        : 'hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer'
+                    }`}
+                  >
+                    <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Move Down</span>
+                  </button>
+                </>
+              )}
+              {onDeleteItem && (
                 <button
                   type="button"
                   onClick={() => {
-                    setActiveMoreMenuId(null);
-                    onOpenEditItemModal(item);
+                    setActiveMoreAnchor(null);
+                    onDeleteItem(item.id);
                   }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#F1F1EF] text-[#37352F] flex items-center gap-2 cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-red-500/20 text-red-400 flex items-center gap-2 border-t border-[#27272a] mt-1 pt-1.5 cursor-pointer transition-colors"
                 >
-                  <Edit2 className="w-3.5 h-3.5 text-[#787774]" />
-                  <span>Edit Details</span>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Item</span>
                 </button>
-                {onDuplicateItem && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveMoreMenuId(null);
-                      onDuplicateItem(item.id);
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#F1F1EF] text-[#37352F] flex items-center gap-2 cursor-pointer"
-                  >
-                    <Copy className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Duplicate Task</span>
-                  </button>
-                )}
-                {onReorderItem && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveMoreMenuId(null);
-                        onReorderItem(item.id, 'up');
-                      }}
-                      disabled={isFirstChild}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center gap-2 transition-colors ${
-                        isFirstChild
-                          ? 'text-[#9B9A97] cursor-not-allowed opacity-50'
-                          : 'hover:bg-[#F1F1EF] text-[#37352F] cursor-pointer'
-                      }`}
-                    >
-                      <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Move Up</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveMoreMenuId(null);
-                        onReorderItem(item.id, 'down');
-                      }}
-                      disabled={isLastChild}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center gap-2 transition-colors ${
-                        isLastChild
-                          ? 'text-[#9B9A97] cursor-not-allowed opacity-50'
-                          : 'hover:bg-[#F1F1EF] text-[#37352F] cursor-pointer'
-                      }`}
-                    >
-                      <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Move Down</span>
-                    </button>
-                  </>
-                )}
-                {onDeleteItem && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveMoreMenuId(null);
-                      onDeleteItem(item.id);
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-red-50 text-red-600 flex items-center gap-2 border-t border-[#E9E9E7] mt-1 pt-1.5 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Delete Item</span>
-                  </button>
-                )}
-              </div>
-            )}
+              )}
+            </PortalMenu>
           </div>
         </div>
 
         {/* Quick Inline Sub-item Input Row */}
         {inlineSubItemParentId === item.id && (
           <div
-            className="flex items-center border-b border-[#ECECEB] bg-[#FAF9F7] py-2 px-3 text-sm animate-in fade-in"
+            className="flex items-center border-b border-[#27272a] bg-[#121215] py-2 px-3 text-sm animate-in fade-in"
             style={{ paddingLeft: `${(depth + 1) * 22 + 14}px` }}
           >
             <span className="text-base mr-2">📄</span>
@@ -889,20 +929,20 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                 if (e.key === 'Enter') handleCreateInlineSubItem(item.id);
                 if (e.key === 'Escape') setInlineSubItemParentId(null);
               }}
-              className="flex-1 bg-transparent border-b border-[#2383E2] outline-none text-sm text-[#37352F] py-0.5 px-1 font-medium"
+              className="flex-1 bg-transparent border-b border-orange-500 outline-none text-sm text-[#f4f4f5] placeholder-[#71717a] py-0.5 px-1 font-medium"
             />
             <div className="flex items-center gap-1.5 ml-2">
               <button
                 type="button"
                 onClick={() => handleCreateInlineSubItem(item.id)}
-                className="px-2.5 py-1 bg-[#2383E2] text-white text-xs font-medium rounded hover:bg-[#1B6FBF] cursor-pointer"
+                className="px-2.5 py-1 bg-orange-500 text-white text-xs font-medium rounded hover:bg-orange-600 cursor-pointer transition-colors"
               >
                 Add
               </button>
               <button
                 type="button"
                 onClick={() => setInlineSubItemParentId(null)}
-                className="px-2 py-1 text-[#787774] hover:bg-[#E9E9E7] text-xs rounded cursor-pointer"
+                className="px-2 py-1 text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] text-xs rounded cursor-pointer transition-colors"
               >
                 Cancel
               </button>
@@ -927,7 +967,7 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-16 max-w-[1400px] mx-auto text-[#37352F]">
+    <div className="space-y-6 pb-16 max-w-[1400px] mx-auto text-[#f4f4f5]">
       {/* 1. Exactly the same Structural Toolbar as TreeView (NO breadcrumbs) */}
       <StructureToolbar
         projects={appData.projects}
@@ -947,9 +987,9 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
 
       {/* 2. Projects Sections */}
       {displayedProjects.length === 0 ? (
-        <div className="bg-[#FFFFFF] border border-[#E9E9E7] rounded-xl p-12 text-center text-[#787774] space-y-3 shadow-xs">
-          <p className="text-base font-semibold text-[#37352F]">No active projects found</p>
-          <p className="text-xs">Adjust your project filter or create a new project using the toolbar above.</p>
+        <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-12 text-center text-[#a1a1aa] space-y-3 shadow-xs">
+          <p className="text-base font-semibold text-[#f4f4f5]">No active projects found</p>
+          <p className="text-xs text-[#71717a]">Adjust your project filter or create a new project using the toolbar above.</p>
         </div>
       ) : (
         displayedProjects.map((project) => {
@@ -984,35 +1024,47 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                   <div className="relative" data-popover-root>
                     <button
                       type="button"
-                      onClick={() => setShowPageEmojiPicker(!showPageEmojiPicker)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveProjectEmojiAnchor(
+                          activeProjectEmojiAnchor?.id === project.id
+                            ? null
+                            : { id: project.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                        );
+                      }}
                       className="text-3xl sm:text-4xl hover:scale-105 transition-transform p-0.5 rounded-lg cursor-pointer select-none"
-                      title="Click to change page icon"
+                      title="Click to change project icon"
                     >
-                      {pageEmoji}
+                      {project.icon || '🌳'}
                     </button>
 
-                    {showPageEmojiPicker && (
-                      <div className="absolute left-0 top-12 z-50 bg-[#FFFFFF] border border-[#E9E9E7] rounded-2xl shadow-2xl p-2.5 grid grid-cols-4 gap-1.5 w-48 animate-in fade-in">
-                        {NOTION_EMOJIS.map((emoji) => (
-                          <button
-                            key={emoji}
-                            type="button"
-                            onClick={() => {
-                              setPageEmoji(emoji);
-                              setShowPageEmojiPicker(false);
-                            }}
-                            className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[#F1F1EF] text-xl cursor-pointer transition-colors"
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    <PortalMenu
+                      isOpen={activeProjectEmojiAnchor?.id === project.id}
+                      onClose={() => setActiveProjectEmojiAnchor(null)}
+                      anchorRect={activeProjectEmojiAnchor?.id === project.id ? activeProjectEmojiAnchor.rect : null}
+                      triggerElement={activeProjectEmojiAnchor?.id === project.id ? activeProjectEmojiAnchor.el : null}
+                      align="left"
+                      className="w-48 p-2.5 grid grid-cols-4 gap-1.5"
+                    >
+                      {NOTION_EMOJIS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => {
+                            handleSetProjectEmoji(project.id, emoji);
+                            setActiveProjectEmojiAnchor(null);
+                          }}
+                          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[#27272a] text-xl cursor-pointer transition-colors"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </PortalMenu>
                   </div>
 
                   {/* Project Title (H1) */}
                   <div className="flex-1 min-w-0">
-                    <h1 className="text-2xl sm:text-3xl font-extrabold text-[#37352F] tracking-tight truncate">
+                    <h1 className="text-2xl sm:text-3xl font-extrabold text-[#f4f4f5] tracking-tight truncate">
                       {project.title}
                     </h1>
                   </div>
@@ -1022,7 +1074,7 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                     <button
                       type="button"
                       onClick={() => onSetAllExpand(true)}
-                      className="flex items-center gap-1 px-2.5 py-1 text-xs text-[#787774] hover:text-[#37352F] hover:bg-[#F1F1EF] border border-[#E9E9E7] rounded-lg transition-colors cursor-pointer"
+                      className="flex items-center gap-1 px-2.5 py-1 text-xs text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] border border-[#27272a] rounded-lg transition-colors cursor-pointer"
                       title="Expand all tasks"
                     >
                       <Maximize2 className="w-3 h-3" />
@@ -1031,7 +1083,7 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                     <button
                       type="button"
                       onClick={() => onSetAllExpand(false)}
-                      className="flex items-center gap-1 px-2.5 py-1 text-xs text-[#787774] hover:text-[#37352F] hover:bg-[#F1F1EF] border border-[#E9E9E7] rounded-lg transition-colors cursor-pointer"
+                      className="flex items-center gap-1 px-2.5 py-1 text-xs text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] border border-[#27272a] rounded-lg transition-colors cursor-pointer"
                       title="Collapse all tasks"
                     >
                       <Minimize2 className="w-3 h-3" />
@@ -1050,20 +1102,20 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                         value={inlineDescriptionValue}
                         onChange={(e) => setInlineDescriptionValue(e.target.value)}
                         placeholder="Write a project description..."
-                        className="w-full bg-[#FFFFFF] border border-[#2383E2] rounded-lg p-2.5 text-sm text-[#37352F] outline-none shadow-xs"
+                        className="w-full bg-[#121215] border border-orange-500 rounded-lg p-2.5 text-sm text-[#f4f4f5] placeholder-[#71717a] outline-none shadow-xs"
                       />
                       <div className="flex items-center gap-2 justify-end">
                         <button
                           type="button"
                           onClick={() => handleSaveProjectDescription(project.id)}
-                          className="px-3 py-1 bg-[#2383E2] text-white text-xs font-semibold rounded hover:bg-[#1B6FBF] cursor-pointer"
+                          className="px-3 py-1 bg-orange-500 text-white text-xs font-semibold rounded hover:bg-orange-600 cursor-pointer transition-colors"
                         >
                           Save Description
                         </button>
                         <button
                           type="button"
                           onClick={() => setEditingDescriptionProjectId(null)}
-                          className="px-2 py-1 text-[#787774] hover:bg-[#E9E9E7] text-xs rounded cursor-pointer"
+                          className="px-2 py-1 text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] text-xs rounded cursor-pointer transition-colors"
                         >
                           Cancel
                         </button>
@@ -1075,11 +1127,11 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                         setEditingDescriptionProjectId(project.id);
                         setInlineDescriptionValue(project.description || '');
                       }}
-                      className="cursor-pointer hover:bg-[#F2F1ED] -mx-1.5 px-1.5 py-1 rounded transition-colors group/desc flex items-start justify-between gap-2 text-sm text-[#787774] leading-relaxed mb-2"
+                      className="cursor-pointer hover:bg-[#18181b]/60 -mx-1.5 px-1.5 py-1 rounded transition-colors group/desc flex items-start justify-between gap-2 text-sm text-[#a1a1aa] leading-relaxed mb-2"
                       title="Click to edit project description"
                     >
                       <p className="flex-1">{projectDescription}</p>
-                      <span className="text-[11px] text-[#9B9A97] opacity-0 group-hover/desc:opacity-100 flex items-center gap-1 shrink-0 mt-0.5">
+                      <span className="text-[11px] text-[#71717a] opacity-0 group-hover/desc:opacity-100 flex items-center gap-1 shrink-0 mt-0.5">
                         <Edit2 className="w-3 h-3" />
                         <span>Edit</span>
                       </span>
@@ -1087,22 +1139,22 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                   )}
 
                   {/* Overall Rollup & Stats - Unboxed */}
-                  <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-[#787774]">
-                    <span className="flex items-center gap-1.5 text-[#0F7B6C]">
-                      <span className="w-2 h-2 rounded-full bg-[#0F7B6C]" />
-                      Sub-items Hierarchy: <strong className="text-[#37352F]">Active</strong>
+                  <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-[#71717a]">
+                    <span className="flex items-center gap-1.5 text-emerald-400">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                      Sub-items Hierarchy: <strong className="text-[#f4f4f5]">Active</strong>
                     </span>
                     <span>•</span>
                     <span>
                       Total Work Units:{' '}
-                      <strong className="text-[#37352F]">
+                      <strong className="text-[#f4f4f5]">
                         {completedTasks} / {totalTasks}
                       </strong>
                     </span>
                     <span>•</span>
                     <span>
                       Completion:{' '}
-                      <strong className="text-[#0F7B6C]">{completionPct}%</strong>
+                      <strong className="text-emerald-400">{completionPct}%</strong>
                     </span>
                   </div>
                 </div>
@@ -1110,43 +1162,43 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
 
               {/* 3. UNBOXED TASK LIST TABLE */}
               <div className="overflow-x-auto">
-                <div className="min-w-[840px]">
+                <div className="min-w-[850px] min-h-[140px] pb-6">
                   {/* Column Header Row (Order aligned with TreeView) */}
-                  <div className="flex items-center border-b border-[#E9E9E7] text-xs font-semibold text-[#787774] select-none py-2 px-1 tracking-wider uppercase">
+                  <div className="flex items-center border-b border-[#27272a] text-xs font-semibold text-[#71717a] select-none py-2.5 px-1 tracking-wider uppercase">
                     {/* 1. Name */}
-                    <div className="flex-1 min-w-[280px] sm:min-w-[360px] flex items-center gap-1 pl-2">
+                    <div className="flex-1 min-w-[250px] xl:min-w-[280px] 2xl:min-w-[340px] flex items-center gap-1 pl-2 xl:pl-4">
                       <span>Name</span>
                     </div>
                     {/* 2. Status */}
-                    <div className="w-28 sm:w-32 px-2 shrink-0">
+                    <div className="w-28 xl:w-36 2xl:w-40 px-2 xl:px-3 shrink-0">
                       <span>Status</span>
                     </div>
                     {/* 3. Progress */}
-                    <div className="w-28 sm:w-32 px-2 shrink-0">
+                    <div className="w-24 xl:w-[106px] 2xl:w-32 px-2 xl:px-3 shrink-0">
                       <span>Progress</span>
                     </div>
                     {/* 4. Date */}
-                    <div className="w-36 sm:w-44 px-2 shrink-0">
+                    <div className="w-[186px] min-w-[186px] xl:w-56 2xl:w-64 px-2 xl:px-4 shrink-0">
                       <span>Date</span>
                     </div>
                     {/* 5. Team */}
-                    <div className="w-28 sm:w-32 px-2 shrink-0">
+                    <div className="w-16 xl:w-24 2xl:w-28 px-2 xl:px-3 shrink-0">
                       <span>Team</span>
                     </div>
                     {/* 6. Timer */}
-                    <div className="w-24 sm:w-28 px-2 shrink-0 text-right pr-2">
+                    <div className="w-24 xl:w-32 2xl:w-36 px-2 xl:px-3 shrink-0 text-right pr-2 xl:pr-3">
                       <span>Timer</span>
                     </div>
                     {/* 7. More */}
-                    <div className="w-12 sm:w-14 px-2 shrink-0 text-center">
+                    <div className="w-10 xl:w-14 2xl:w-16 px-1 xl:px-2 shrink-0 text-center">
                       <span>More</span>
                     </div>
                   </div>
 
                   {/* Tasks Rows */}
                   {sortedItems.length === 0 ? (
-                    <div className="py-8 text-center text-[#9B9A97] text-xs">
-                      No tasks found in this project. Click <span className="font-semibold text-[#37352F]">+ New Task</span> below to start.
+                    <div className="py-8 text-center text-[#71717a] text-xs">
+                      No tasks found in this project. Click <span className="font-semibold text-[#f4f4f5]">+ New Task</span> below to start.
                     </div>
                   ) : (
                     sortedItems.map((item, idx) =>
@@ -1162,8 +1214,8 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
 
                   {/* Inline Root Item Input Row */}
                   {addingRootProjectId === project.id && (
-                    <div className="flex items-center bg-[#FAF9F7] py-2.5 px-3 text-sm border-b border-[#ECECEB] animate-in fade-in">
-                      <span className="text-base mr-2">{pageEmoji}</span>
+                    <div className="flex items-center bg-[#121215] py-2.5 px-3 text-sm border-b border-[#27272a] animate-in fade-in">
+                      <span className="text-base mr-2">{project.icon || '📄'}</span>
                       <input
                         type="text"
                         autoFocus
@@ -1174,20 +1226,20 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                           if (e.key === 'Enter') handleCreateInlineRootItem(project.id);
                           if (e.key === 'Escape') setAddingRootProjectId(null);
                         }}
-                        className="flex-1 bg-transparent border-b border-[#2383E2] outline-none text-sm text-[#37352F] py-0.5 px-1 font-medium"
+                        className="flex-1 bg-transparent border-b border-orange-500 outline-none text-sm text-[#f4f4f5] placeholder-[#71717a] py-0.5 px-1 font-medium"
                       />
                       <div className="flex items-center gap-2 ml-3">
                         <button
                           type="button"
                           onClick={() => handleCreateInlineRootItem(project.id)}
-                          className="px-3 py-1 bg-[#2383E2] text-white text-xs font-semibold rounded hover:bg-[#1B6FBF] cursor-pointer"
+                          className="px-3 py-1 bg-orange-500 text-white text-xs font-semibold rounded hover:bg-orange-600 cursor-pointer transition-colors"
                         >
                           Add
                         </button>
                         <button
                           type="button"
                           onClick={() => setAddingRootProjectId(null)}
-                          className="px-2 py-1 text-[#787774] hover:bg-[#E9E9E7] text-xs rounded cursor-pointer"
+                          className="px-2 py-1 text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] text-xs rounded cursor-pointer transition-colors"
                         >
                           Cancel
                         </button>
@@ -1201,7 +1253,7 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                       setAddingRootProjectId(project.id);
                       setInlineRootName('');
                     }}
-                    className="flex items-center gap-2 py-2 px-2 text-xs font-medium text-[#787774] hover:text-[#37352F] hover:bg-[#F9F9F8] cursor-pointer transition-colors border-b border-dashed border-[#E0E0DE] mt-1"
+                    className="flex items-center gap-2 py-2 px-2 text-xs font-medium text-[#71717a] hover:text-[#f4f4f5] hover:bg-[#18181b]/50 cursor-pointer transition-colors border-b border-dashed border-[#27272a] mt-1"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>New Task</span>

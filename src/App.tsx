@@ -652,10 +652,19 @@ function WorkspaceApp() {
   };
 
   // Project Handlers
-  const handleSaveProject = (title: string, color: string, status: ProjectStatus = 'active') => {
+  const handleSaveProject = (title: string, color: string, status: ProjectStatus = 'active', icon?: string, description?: string) => {
     if (editingProject) {
       const updatedProjects = appData.projects.map((p) =>
-        p.id === editingProject.id ? { ...p, title, color, status } : p
+        p.id === editingProject.id
+          ? {
+              ...p,
+              title,
+              color,
+              status,
+              icon: icon !== undefined ? icon : p.icon,
+              description: description !== undefined ? description : p.description,
+            }
+          : p
       );
       if (status === 'archived' && selectedProjectId === editingProject.id) {
         const remainingActive = updatedProjects.filter((p) => p.status === 'active');
@@ -669,6 +678,8 @@ function WorkspaceApp() {
         title,
         status,
         color,
+        icon: icon || '🌳',
+        description: description || '',
         items: [],
       };
       persistData({
@@ -844,6 +855,7 @@ function WorkspaceApp() {
           {currentView === 'projects' && (
             <TreeView
               appData={appData}
+              onSaveData={persistData}
               selectedProjectId={selectedProjectId}
               onSelectProjectFilter={handleSelectProjectFilter}
               onSelectProject={handleSelectProjectFilter}
@@ -861,6 +873,7 @@ function WorkspaceApp() {
               onDuplicateProject={handleDuplicateProject}
               onDeleteProject={handleDeleteProject}
               onToggleExpand={handleToggleItemExpand}
+              onSetAllExpand={handleSetAllExpand}
               onOpenProjectModal={openProjectModal}
               onArchiveProject={handleArchiveProject}
               searchQuery={searchQuery}
