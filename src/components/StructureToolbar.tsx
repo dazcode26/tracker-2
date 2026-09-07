@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Person, ProjectNode } from '../types';
 import { TreeSortBy, TreeSortDirection, TREE_SORT_OPTIONS } from '../utils/treeSorting';
+import { useHeadroom } from '../hooks/useHeadroom';
 
 export interface StructureToolbarProps {
   // Project Filter
@@ -133,33 +134,57 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
   const activeSortOption = TREE_SORT_OPTIONS.find((opt) => opt.id === sortBy) || TREE_SORT_OPTIONS[0];
   const isNonDefaultSort = sortBy !== 'default';
 
-  // Multi-select projects parsing (comma-separated or 'all')
+  // Multi-select projects parsing (comma-separated, 'none', or 'all')
+  const isNoneProjects = selectedProjectId === 'none';
   const selectedProjectIds = React.useMemo(() => {
-    if (!selectedProjectId || selectedProjectId === 'all') return [];
+    if (!selectedProjectId || selectedProjectId === 'all' || selectedProjectId === 'none') return [];
     return selectedProjectId.split(',').filter(Boolean);
   }, [selectedProjectId]);
 
-  const isAllProjectsSelected = selectedProjectIds.length === 0 || selectedProjectIds.length === activeProjects.length;
+  const isAllProjectsSelected =
+    !isNoneProjects &&
+    (!selectedProjectId ||
+      selectedProjectId === 'all' ||
+      (activeProjects.length > 0 && selectedProjectIds.length === activeProjects.length));
 
-  // Multi-select team parsing (comma-separated or 'all')
+  // Multi-select team parsing (comma-separated, 'none', or 'all')
+  const isNonePersons = selectedPersonId === 'none';
   const selectedPersonIds = React.useMemo(() => {
-    if (!selectedPersonId || selectedPersonId === 'all') return [];
+    if (!selectedPersonId || selectedPersonId === 'all' || selectedPersonId === 'none') return [];
     return selectedPersonId.split(',').filter(Boolean);
   }, [selectedPersonId]);
 
-  const isAllPersonsSelected = selectedPersonIds.length === 0 || selectedPersonIds.length === persons.length;
+  const isAllPersonsSelected =
+    !isNonePersons &&
+    (!selectedPersonId ||
+      selectedPersonId === 'all' ||
+      (persons.length > 0 && selectedPersonIds.length === persons.length));
 
   const handleToggleProject = (projId: string) => {
     let next: string[];
-    if (selectedProjectIds.includes(projId)) {
+    if (isAllProjectsSelected) {
+      next = activeProjects.map((p) => p.id).filter((id) => id !== projId);
+    } else if (isNoneProjects) {
+      next = [projId];
+    } else if (selectedProjectIds.includes(projId)) {
       next = selectedProjectIds.filter((id) => id !== projId);
     } else {
       next = [...selectedProjectIds, projId];
     }
-    if (next.length === 0 || next.length === activeProjects.length) {
+    if (next.length === activeProjects.length) {
       onSelectProject('all');
+    } else if (next.length === 0) {
+      onSelectProject('none');
     } else {
       onSelectProject(next.join(','));
+    }
+  };
+
+  const handleToggleAllProjects = () => {
+    if (isAllProjectsSelected) {
+      onSelectProject('none');
+    } else {
+      onSelectProject('all');
     }
   };
 
@@ -170,15 +195,30 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
   const handleTogglePerson = (uId: string) => {
     if (!onSelectPerson) return;
     let next: string[];
-    if (selectedPersonIds.includes(uId)) {
+    if (isAllPersonsSelected) {
+      next = persons.map((u) => u.id).filter((id) => id !== uId);
+    } else if (isNonePersons) {
+      next = [uId];
+    } else if (selectedPersonIds.includes(uId)) {
       next = selectedPersonIds.filter((id) => id !== uId);
     } else {
       next = [...selectedPersonIds, uId];
     }
-    if (next.length === 0 || next.length === persons.length) {
+    if (next.length === persons.length) {
       onSelectPerson('all');
+    } else if (next.length === 0) {
+      onSelectPerson('none');
     } else {
       onSelectPerson(next.join(','));
+    }
+  };
+
+  const handleToggleAllPersons = () => {
+    if (!onSelectPerson) return;
+    if (isAllPersonsSelected) {
+      onSelectPerson('none');
+    } else {
+      onSelectPerson('all');
     }
   };
 
@@ -188,9 +228,22 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
     }
   };
 
+  const isAnyMenuOpen = isProjectFilterOpen || isPersonFilterOpen || isSortFilterOpen || isMobileSearchOpen;
+  const { isSticky, isVisible } = useHeadroom({ forceVisible: isAnyMenuOpen });
+
   return (
-    <div className="flex items-center justify-between gap-2 sm:gap-3 pb-2 border-b border-[#27272a] h-10 relative">
-      {/* MOBILE / TABLET FULL-WIDTH SEARCH BAR (Spans the entire toolbar on < md, covering filters on left & Add Project on right) */}
+    <div
+      className={`sticky top-0 z-30 transition-opacity duration-200 ease-out ${
+        isSticky
+          ? `py-2.5 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 bg-[#101010]/95 dark:bg-[#101010]/95 [data-theme=light]:bg-[#f8fafc]/95 backdrop-blur-md border-b border-[#27272a] [data-theme=light]:border-[#e2e8f0] shadow-lg shadow-black/25 ${
+              isVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+            }`
+          : 'opacity-100 py-0'
+      }`}
+    >
+      <div className="max-w-[1400px] mx-auto">
+        <div className={`flex items-center justify-between gap-2 sm:gap-3 ${isSticky ? 'h-8 sm:h-9' : 'pb-2 border-b border-[#27272a] h-10'} relative`}>
+          {/* MOBILE / TABLET FULL-WIDTH SEARCH BAR (Spans the entire toolbar on < md, covering filters on left & Add Project on right) */}
       {isMobileSearchOpen && (
         <div className="md:hidden flex items-center gap-2 w-full h-full animate-in fade-in duration-150">
           <div className="relative flex-1 min-w-0">
@@ -244,6 +297,11 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                 <Folder className="w-3.5 h-3.5 text-orange-400 shrink-0" />
                 <span className="truncate">All Projects</span>
               </>
+            ) : isNoneProjects || selectedProjectIds.length === 0 ? (
+              <>
+                <Folder className="w-3.5 h-3.5 text-[#71717a] shrink-0" />
+                <span className="truncate text-[#a1a1aa]">0 Projects</span>
+              </>
             ) : selectedProjectIds.length === 1 ? (
               <>
                 <span
@@ -295,7 +353,7 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                 {/* Master All Projects Checkbox */}
                 <button
                   type="button"
-                  onClick={handleSelectAllProjects}
+                  onClick={handleToggleAllProjects}
                   className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition-colors cursor-pointer ${
                     isAllProjectsSelected
                       ? 'bg-orange-500/15 text-orange-400 font-semibold'
@@ -323,7 +381,7 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                 {/* Project List with individual checkboxes */}
                 <div className="flex flex-col gap-0.5 max-h-52 overflow-y-auto pr-0.5">
                   {activeProjects.map((p) => {
-                    const isChecked = !isAllProjectsSelected && selectedProjectIds.includes(p.id);
+                    const isChecked = !isNoneProjects && (isAllProjectsSelected || selectedProjectIds.includes(p.id));
                     return (
                       <button
                         key={p.id}
@@ -380,6 +438,11 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                 <>
                   <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                   <span className="truncate">All Team</span>
+                </>
+              ) : isNonePersons || selectedPersonIds.length === 0 ? (
+                <>
+                  <Users className="w-3.5 h-3.5 text-[#71717a] shrink-0" />
+                  <span className="truncate text-[#a1a1aa]">0 Members</span>
                 </>
               ) : selectedPersonIds.length === 1 ? (
                 <>
@@ -440,7 +503,7 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                   {/* Master All Team Checkbox */}
                   <button
                     type="button"
-                    onClick={handleSelectAllPersons}
+                    onClick={handleToggleAllPersons}
                     className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium flex items-center gap-2.5 transition-colors cursor-pointer ${
                       isAllPersonsSelected
                         ? 'bg-orange-500/15 text-orange-400 font-semibold'
@@ -468,7 +531,7 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                   {/* Team Members List with Checkboxes */}
                   <div className="flex flex-col gap-0.5 max-h-52 overflow-y-auto pr-0.5">
                     {persons.map((u) => {
-                      const isChecked = !isAllPersonsSelected && selectedPersonIds.includes(u.id);
+                      const isChecked = !isNonePersons && (isAllPersonsSelected || selectedPersonIds.includes(u.id));
                       return (
                         <button
                           key={u.id}
@@ -721,6 +784,8 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
         </button>
       </div>
     </div>
-  );
+  </div>
+</div>
+);
 };
 

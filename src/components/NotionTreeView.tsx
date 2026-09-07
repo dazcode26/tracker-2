@@ -197,23 +197,28 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
   const [activeEmojiAnchor, setActiveEmojiAnchor] = useState<MenuAnchorState | null>(null);
   const [activeProjectEmojiAnchor, setActiveProjectEmojiAnchor] = useState<MenuAnchorState | null>(null);
 
+  const isNoneProjects = selectedProjectId === 'none';
+  const isNonePersons = selectedPersonId === 'none';
+
   const selectedProjectIds = useMemo(() => {
-    if (!selectedProjectId || selectedProjectId === 'all') return [];
+    if (!selectedProjectId || selectedProjectId === 'all' || selectedProjectId === 'none') return [];
     return selectedProjectId.split(',').filter(Boolean);
   }, [selectedProjectId]);
 
   const selectedPersonIds = useMemo(() => {
-    if (!selectedPersonId || selectedPersonId === 'all') return [];
+    if (!selectedPersonId || selectedPersonId === 'all' || selectedPersonId === 'none') return [];
     return selectedPersonId.split(',').filter(Boolean);
   }, [selectedPersonId]);
 
   // Filter projects by selected project IDs and person IDs
   const displayedProjects = useMemo(() => {
+    if (isNoneProjects) return [];
     const activeProjects = appData.projects.filter((p) => p.status === 'active');
     return activeProjects.filter((project) => {
       if (selectedProjectIds.length > 0 && !selectedProjectIds.includes(project.id)) {
         return false;
       }
+      if (isNonePersons) return false;
       if (selectedPersonIds.length > 0) {
         const hasMatchingPerson = (project.items || []).some((item) => {
           const matchItem = (node: ItemNode): boolean => {
@@ -229,10 +234,11 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
       }
       return true;
     });
-  }, [appData.projects, selectedProjectIds, selectedPersonIds]);
+  }, [appData.projects, isNoneProjects, isNonePersons, selectedProjectIds, selectedPersonIds]);
 
   // Check if item matches search and person filter
   const itemMatchesFilter = (item: ItemNode): boolean => {
+    if (isNonePersons) return false;
     // Person filter
     if (selectedPersonIds.length > 0) {
       const matchesSelf =
@@ -420,7 +426,7 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
         >
           {/* Column 1: NAME (Tree Indent + Chevron + Icon + Name + Action Buttons: OPEN & + Sub-item) */}
           <div
-            className="flex-1 flex items-center min-w-[250px] xl:min-w-[280px] 2xl:min-w-[340px] py-2 pr-2 xl:pr-4 relative"
+            className="flex-1 flex items-center min-w-[200px] xl:min-w-[260px] 2xl:min-w-[320px] py-2 pr-2 xl:pr-4 relative"
             style={{ paddingLeft: `${Math.max(4, depth * 22 + 6)}px` }}
           >
             {/* Guide Lines for nested items */}
@@ -508,18 +514,8 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
               {item.name}
             </span>
 
-            {/* ACTION BUTTONS ON THE RIGHT OF TASK NAME: OPEN & + SUB-ITEM (Shown on hover) */}
-            <div className="hidden group-hover:flex items-center gap-1 ml-2 shrink-0 animate-in fade-in">
-              {/* OPEN button */}
-              <button
-                type="button"
-                onClick={() => onOpenEditItemModal(item)}
-                className="px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] rounded transition-colors uppercase cursor-pointer border border-transparent hover:border-[#3f3f46]"
-                title="Open task details (side-peek)"
-              >
-                OPEN
-              </button>
-
+            {/* ACTION BUTTON ON THE RIGHT OF TASK NAME: + Sub-item (Shown on hover) */}
+            <div className="hidden group-hover:flex items-center ml-2 shrink-0 animate-in fade-in">
               {/* + Sub-item button */}
               <button
                 type="button"
@@ -527,7 +523,7 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                   setInlineSubItemParentId(item.id);
                   setInlineSubItemName('');
                 }}
-                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] rounded transition-colors cursor-pointer border border-transparent hover:border-[#3f3f46]"
+                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-[#a1a1aa] hover:text-[#f4f4f5] bg-transparent hover:bg-[#27272a] border border-transparent hover:border-[#3f3f46] rounded transition-all cursor-pointer"
                 title="Add sub-item"
               >
                 <Plus className="w-3 h-3" />
@@ -692,17 +688,17 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
           {/* Column 4: DATE (Same format as TreeView: Range & Days Left) */}
           <div
             onClick={() => onOpenEditItemModal(item)}
-            className="w-[186px] min-w-[186px] xl:w-56 2xl:w-64 px-2 xl:px-4 shrink-0 font-mono text-xs cursor-pointer hover:bg-[#27272a]/50 rounded py-1 transition-colors flex flex-col justify-center min-w-0"
+            className="w-[186px] min-w-[186px] xl:w-56 2xl:w-64 px-2 xl:px-4 shrink-0 font-mono text-[11px] cursor-pointer hover:bg-[#27272a]/50 rounded py-1 transition-colors flex flex-col justify-center min-w-0"
             title={`Realization: ${dateRangeStr || 'None'}\nTarget: ${dateInfo.fullDate}\nClick to edit details`}
           >
             {dateRangeStr ? (
               <span className="text-[#71717a] font-mono whitespace-nowrap truncate">{dateRangeStr}</span>
             ) : (
-              <span className="text-[#71717a] italic text-xs font-mono">-</span>
+              <span className="text-[#71717a] italic text-[11px] font-mono">-</span>
             )}
             {!isCompleted && item.targetDate && (
               <span
-                className={`truncate font-mono text-[11px] ${
+                className={`truncate font-mono text-[10px] ${
                   dateInfo.isOverdue
                     ? 'text-red-400 font-semibold'
                     : dateInfo.text === 'Today'
@@ -799,9 +795,9 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
           </div>
 
           {/* Column 6: TIMER (Tracked Time & Play/Stop Button) */}
-          <div className="w-24 xl:w-32 2xl:w-36 px-2 xl:px-3 shrink-0 flex items-center justify-end gap-2 xl:gap-3">
+          <div className="w-[130px] xl:w-36 2xl:w-40 px-2 xl:px-3 shrink-0 flex items-center justify-end gap-2 xl:gap-3">
             <span
-              className={`font-mono text-xs ${
+              className={`font-mono text-[11px] whitespace-nowrap shrink-0 ${
                 isTimerRunning ? 'text-orange-400 font-bold animate-pulse' : 'text-[#71717a]'
               }`}
             >
@@ -1170,23 +1166,28 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                     </div>
                   )}
 
-                  {/* Overall Rollup & Stats - Unboxed */}
-                  <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-[#71717a]">
-                    <span className="flex items-center gap-1.5 text-emerald-400">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                      Sub-items Hierarchy: <strong className="text-[#f4f4f5]">Active</strong>
-                    </span>
-                    <span>•</span>
-                    <span>
-                      Total Work Units:{' '}
-                      <strong className="text-[#f4f4f5]">
+                  {/* Project Progress Bar & Completion Metrics */}
+                  <div className="mt-2.5 flex items-center gap-3">
+                    {/* Visual Progress Bar */}
+                    <div className="w-32 sm:w-44 bg-[#27272a] h-2 rounded-full overflow-hidden shrink-0">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          completionPct === 100
+                            ? 'bg-emerald-500'
+                            : completionPct > 0
+                            ? 'bg-orange-500'
+                            : 'bg-transparent'
+                        }`}
+                        style={{ width: `${completionPct}%` }}
+                      />
+                    </div>
+
+                    {/* Completed: X / Y */}
+                    <span className="text-xs text-[#a1a1aa] shrink-0 font-medium">
+                      Completed:{' '}
+                      <strong className="text-[#f4f4f5] font-mono">
                         {completedTasks} / {totalTasks}
                       </strong>
-                    </span>
-                    <span>•</span>
-                    <span>
-                      Completion:{' '}
-                      <strong className="text-emerald-400">{completionPct}%</strong>
                     </span>
                   </div>
                 </div>
@@ -1196,9 +1197,9 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
               <div className="overflow-x-auto">
                 <div className="min-w-[850px] min-h-[140px] pb-6">
                   {/* Column Header Row (Order aligned with TreeView) */}
-                  <div className="flex items-center border-b border-[#27272a] text-xs font-semibold text-[#71717a] select-none py-2.5 px-1 tracking-wider uppercase">
+                  <div className="flex items-center border-b border-[#27272a] text-[11px] font-semibold text-[#71717a] select-none py-2.5 px-1 tracking-wider uppercase">
                     {/* 1. Name */}
-                    <div className="flex-1 min-w-[250px] xl:min-w-[280px] 2xl:min-w-[340px] flex items-center gap-1 pl-2 xl:pl-4">
+                    <div className="flex-1 min-w-[200px] xl:min-w-[260px] 2xl:min-w-[320px] flex items-center gap-1 pl-2 xl:pl-4">
                       <span>Name</span>
                     </div>
                     {/* 2. Status */}
@@ -1218,7 +1219,7 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                       <span>Team</span>
                     </div>
                     {/* 6. Timer */}
-                    <div className="w-24 xl:w-32 2xl:w-36 px-2 xl:px-3 shrink-0 text-right pr-2 xl:pr-3">
+                    <div className="w-[130px] xl:w-36 2xl:w-40 px-2 xl:px-3 shrink-0 text-right pr-2 xl:pr-3">
                       <span>Timer</span>
                     </div>
                     {/* 7. More */}
@@ -1285,7 +1286,7 @@ export const NotionTreeView: React.FC<NotionTreeViewProps> = ({
                       setAddingRootProjectId(project.id);
                       setInlineRootName('');
                     }}
-                    className="flex items-center gap-2 py-2 px-2 text-xs font-medium text-[#71717a] hover:text-[#f4f4f5] hover:bg-[#18181b]/50 cursor-pointer transition-colors border-b border-dashed border-[#27272a] mt-1"
+                    className="flex items-center gap-2 py-2 px-2 text-xs font-medium text-[#71717a] hover:text-[#f4f4f5] hover:bg-[#18181b]/70 cursor-pointer transition-colors border-b border-dashed border-[#27272a] mt-1"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>New Task</span>

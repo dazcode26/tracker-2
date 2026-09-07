@@ -511,22 +511,27 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     return events;
   }, [activeProjects, appData.settings.activeTimer]);
 
+  const isNoneProjects = currentProjectId === 'none';
+  const isNonePersons = selectedPersonId === 'none';
+
   const selectedProjectIds = useMemo(() => {
-    if (!currentProjectId || currentProjectId === 'all') return [];
+    if (!currentProjectId || currentProjectId === 'all' || currentProjectId === 'none') return [];
     return currentProjectId.split(',').filter(Boolean);
   }, [currentProjectId]);
 
   const selectedPersonIds = useMemo(() => {
-    if (!selectedPersonId || selectedPersonId === 'all') return [];
+    if (!selectedPersonId || selectedPersonId === 'all' || selectedPersonId === 'none') return [];
     return selectedPersonId.split(',').filter(Boolean);
   }, [selectedPersonId]);
 
   // Filter events based on active filters
   const filteredEvents = useMemo(() => {
     return allEvents.filter((ev) => {
+      if (isNoneProjects) return false;
       if (selectedProjectIds.length > 0 && !selectedProjectIds.includes(ev.project.id)) {
         return false;
       }
+      if (isNonePersons) return false;
       if (selectedPersonIds.length > 0) {
         const matchAssignee = ev.item.assigneeId && selectedPersonIds.includes(ev.item.assigneeId);
         const matchReviewer = ev.item.reviewerId && selectedPersonIds.includes(ev.item.reviewerId);

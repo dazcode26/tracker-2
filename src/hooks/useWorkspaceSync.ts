@@ -144,17 +144,23 @@ export function useWorkspaceSync(
     } catch {}
     return null;
   });
-  const [isInitialCloudLoaded, setIsInitialCloudLoaded] = useState<boolean>(true);
-  const isInitialCloudLoadedRef = useRef<boolean>(true);
+  const [isInitialCloudLoaded, setIsInitialCloudLoaded] = useState<boolean>(() => {
+    if (isDevBypass) return true;
+    const cached = localStorage.getItem(LOCAL_STORAGE_DATA_KEY);
+    return !!cached;
+  });
+  const isInitialCloudLoadedRef = useRef<boolean>(isInitialCloudLoaded);
   const [syncError, setSyncError] = useState<string | null>(null);
 
   // Keep a ref of current appData to avoid stale closure during remote sync
   const appDataRef = useRef<AppData>(appData);
   appDataRef.current = appData;
 
-  const hasUnsyncedLocalChangesRef = useRef<boolean>(() => {
-    return localStorage.getItem('struktur_has_unsynced') === 'true';
-  });
+  const hasUnsyncedLocalChangesRef = useRef<boolean>(
+    localStorage.getItem('struktur_has_unsynced') === 'true'
+  );
+
+  const hasAutoCheckedCloudRef = useRef<string | null>(null);
 
   // Helper to count total tasks across all projects
   const countTotalTasks = (projects: any[]): number => {
@@ -195,15 +201,121 @@ export function useWorkspaceSync(
     }
   }, []);
 
-  // 1. Local-first initialization: No automatic load from cloud on startup
+  // 1. Cloud-aware synchronization on user login/startup:
+  // - If brand new device/browser (no local cache): automatically pulls workspace from Firestore.
+  // - If existing device with no local unsynced edits: checks if cloud has newer updates and seamlessly pulls.
   useEffect(() => {
-    setIsInitialCloudLoaded(true);
-    isInitialCloudLoadedRef.current = true;
     if (isDevBypass) {
       setSyncStatus('dev-preview');
-    } else if (!currentUser) {
-      setSyncStatus('offline');
+      setIsInitialCloudLoaded(true);
+      isInitialCloudLoadedRef.current = true;
+      return;
     }
+
+    if (!currentUser) {
+      setSyncStatus('offline');
+      setIsInitialCloudLoaded(true);
+      isInitialCloudLoadedRef.current = true;
+      hasAutoCheckedCloudRef.current = null;
+      return;
+    }
+
+    // Only run the auto-initial check once per user session
+    if (hasAutoCheckedCloudRef.current === currentUser.uid) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const performCloudInit = async () => {
+      const cachedRaw = localStorage.getItem(LOCAL_STORAGE_DATA_KEY);
+      const hasCached = !!cachedRaw;
+      const hasUnsynced = localStorage.getItem('struktur_has_unsynced') === 'true';
+
+      // If fresh device/browser without local cache, put into loading state
+      if (!hasCached) {
+        setIsInitialCloudLoaded(false);
+        isInitialCloudLoadedRef.current = false;
+        setSyncStatus('saving');
+      }
+
+      try {
+        const workspaceDocRef = doc(db, 'users', currentUser.uid, 'workspace', 'data');
+        const snapshot = await withTimeout(
+          getDoc(workspaceDocRef),
+          10000,
+          'Waktu habis saat menghubungkan ke cloud.'
+        );
+
+        if (isCancelled) return;
+
+        if (snapshot.exists()) {
+          const remoteData = snapshot.data() as any;
+          if (remoteData && Array.isArray(remoteData.projects)) {
+            let remoteTime = 0;
+            if (remoteData._updatedAt?.toMillis) {
+              remoteTime = remoteData._updatedAt.toMillis();
+            } else if (remoteData._lastModified) {
+              remoteTime = Number(remoteData._lastModified);
+            }
+
+            const localTime = appDataRef.current._lastModified || 0;
+
+            // Scenario A: Brand new device/browser (no local cache at all)
+            // Scenario B: Existing device with NO pending unsynced edits, and cloud is newer or equal
+            if (!hasCached || (!hasUnsynced && remoteTime >= localTime)) {
+              const cleanRemote = remoteData as AppData;
+              setAppData(cleanRemote);
+              appDataRef.current = cleanRemote;
+              try {
+                localStorage.setItem(LOCAL_STORAGE_DATA_KEY, JSON.stringify(cleanRemote));
+                localStorage.removeItem('struktur_has_unsynced');
+                let remoteDate = new Date();
+                if (remoteData._updatedAt?.toDate) {
+                  remoteDate = remoteData._updatedAt.toDate();
+                } else if (remoteTime > 0) {
+                  remoteDate = new Date(remoteTime);
+                }
+                localStorage.setItem('struktur_last_synced_at', remoteDate.toISOString());
+                setLastSyncedAt(remoteDate);
+              } catch (storageErr) {
+                console.warn('LocalStorage save error:', storageErr);
+              }
+              hasUnsyncedLocalChangesRef.current = false;
+              setSyncStatus('synced');
+              setSyncError(null);
+            } else if (hasUnsynced) {
+              // Local changes exist that have not been uploaded
+              setSyncStatus('unsynced');
+            } else {
+              setSyncStatus('synced');
+            }
+          } else {
+            setSyncStatus('synced');
+          }
+        } else {
+          // Document does not exist in cloud yet (first time user)
+          setSyncStatus('synced');
+        }
+      } catch (err: any) {
+        console.warn('Auto cloud load on startup error:', err);
+        if (!isCancelled) {
+          setSyncError(err?.message || 'Gagal memuat data dari cloud secara otomatis.');
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsInitialCloudLoaded(true);
+          isInitialCloudLoadedRef.current = true;
+          hasAutoCheckedCloudRef.current = currentUser.uid;
+        }
+      }
+    };
+
+    performCloudInit();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [currentUser, isDevBypass]);
 
   // 2. Persist data: Local storage only (No automatic upload to cloud)
@@ -268,6 +380,28 @@ export function useWorkspaceSync(
       const currentData = appDataRef.current;
       const cleanData = JSON.parse(JSON.stringify(currentData));
 
+      // Anti-Overwrite Protection:
+      // Verify remote document before blindly overwriting if local has 0 items and remote has data
+      try {
+        const existingSnap = await withTimeout(getDoc(workspaceDocRef), 6000, 'Cloud check timeout');
+        if (existingSnap && existingSnap.exists()) {
+          const remoteData = existingSnap.data() as AppData;
+          const remoteStats = computeDataStats(remoteData);
+          const localStats = computeDataStats(cleanData);
+
+          if (remoteStats.itemCount > 0 && localStats.itemCount === 0) {
+            throw new Error(
+              `Pencegahan data tertimpa: Cloud memiliki ${remoteStats.itemCount} tugas, sedangkan data lokal kosong (0 tugas). Silakan gunakan "Pull dari Cloud" terlebih dahulu.`
+            );
+          }
+        }
+      } catch (checkErr: any) {
+        if (checkErr?.message?.includes('Pencegahan data tertimpa')) {
+          throw checkErr;
+        }
+        // If it's a transient check timeout, continue with write
+      }
+
       setDoc(
         doc(db, 'users', currentUser.uid),
         {
@@ -282,6 +416,7 @@ export function useWorkspaceSync(
         setDoc(workspaceDocRef, {
           ...cleanData,
           _updatedAt: serverTimestamp(),
+          _lastModified: Date.now(),
           _ownerEmail: currentUser.email || null,
         }),
         25000,
@@ -305,6 +440,7 @@ export function useWorkspaceSync(
       hasUnsyncedLocalChangesRef.current = true;
       setSyncStatus('error');
       setSyncError(err?.message || 'Manual sync failed (koneksi lambat)');
+      throw err;
     }
   }, [currentUser, isDevBypass, saveCloudSnapshot]);
 
@@ -401,6 +537,7 @@ export function useWorkspaceSync(
       setDoc(workspaceDocRef, {
         ...cleanData,
         _updatedAt: serverTimestamp(),
+        _lastModified: Date.now(),
         _ownerEmail: currentUser.email || null,
       }),
       25000,

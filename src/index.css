@@ -512,27 +512,57 @@
 
 /* Hover & group-hover state overrides */
 [data-theme="light"] .hover\:bg-\[\#18181b\]:hover,
+[data-theme="light"] .hover\:bg-\[\#18181b\]\/90:hover,
 [data-theme="light"] .hover\:bg-\[\#18181b\]\/80:hover,
+[data-theme="light"] .hover\:bg-\[\#18181b\]\/70:hover,
 [data-theme="light"] .hover\:bg-\[\#18181b\]\/60:hover,
+[data-theme="light"] .hover\:bg-\[\#18181b\]\/50:hover,
+[data-theme="light"] .hover\:bg-\[\#18181b\]\/40:hover,
+[data-theme="light"] .hover\:bg-\[\#18181b\]\/30:hover,
+[data-theme="light"] .hover\:bg-\[\#18181b\]\/20:hover,
 [data-theme="light"] .hover\:bg-\[\#1a1a1f\]:hover,
 [data-theme="light"] .hover\:bg-\[\#18181c\]:hover,
 [data-theme="light"] .hover\:bg-\[\#202025\]:hover,
 [data-theme="light"] .hover\:bg-\[\#27272a\]:hover,
 [data-theme="light"] .hover\:bg-\[\#27272a\]\/30:hover,
+[data-theme="light"] .hover\:bg-\[\#27272a\]\/40:hover,
 [data-theme="light"] .hover\:bg-\[\#27272a\]\/50:hover,
+[data-theme="light"] .hover\:bg-\[\#27272a\]\/60:hover,
 [data-theme="light"] .hover\:bg-\[\#2d3449\]:hover,
 [data-theme="light"] .hover\:bg-\[\#3f3f46\]:hover,
+[data-theme="light"] .hover\:bg-\[\#3f3f46\]\/50:hover,
 [data-theme="light"] .group:hover .group-hover\:bg-\[\#18181c\],
 [data-theme="light"] .group:hover .group-hover\:bg-\[\#1a1a1f\],
 [data-theme="light"] .group:hover .group-hover\:bg-\[\#202025\],
-[data-theme="light"] .group:hover .group-hover\:bg-\[\#27272a\] {
+[data-theme="light"] .group:hover .group-hover\:bg-\[\#27272a\],
+[data-theme="light"] .group:hover .group-hover\:bg-\[\#27272a\]\/60,
+[data-theme="light"] .group:hover .group-hover\:bg-\[\#27272a\]\/50 {
   background-color: #f1f5f9 !important;
+}
+
+[data-theme="light"] .group:hover .group-hover\:bg-\[\#18181b\]\/70,
+[data-theme="light"] .group:hover .group-hover\:bg-\[\#18181b\]\/60,
+[data-theme="light"] .group:hover .group-hover\:bg-\[\#18181b\]\/50 {
+  background-color: #e5e7eb !important;
+}
+
+[data-theme="light"] .hover\:bg-\[\#e5e7eb\]:hover {
+  background-color: #e5e7eb !important;
 }
 
 [data-theme="light"] .hover\:text-\[\#f4f4f5\]:hover,
 [data-theme="light"] .hover\:text-\[\#dae2fd\]:hover,
 [data-theme="light"] .hover\:text-white:hover {
   color: #0f172a !important;
+}
+
+[data-theme="light"] .group:hover .group-hover\/title\:text-white,
+[data-theme="light"] [class*="group-hover/title:text-white"] {
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .hover\:border-\[\#3f3f46\]:hover {
+  border-color: #cbd5e1 !important;
 }
 
 /* Sticky column lateral shadow in light mode */

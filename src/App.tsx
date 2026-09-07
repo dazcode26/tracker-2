@@ -812,11 +812,22 @@ function WorkspaceApp() {
     setIsProjectModalOpen(true);
   };
 
-  if (isLoading) {
+  const handleSignOut = async () => {
+    try {
+      localStorage.removeItem('struktur_app_data');
+      localStorage.removeItem('struktur_has_unsynced');
+      localStorage.removeItem('struktur_last_synced_at');
+    } catch {}
+    await signOut();
+  };
+
+  if (isLoading || (!isInitialCloudLoaded && currentUser && !isDevBypass)) {
     return (
       <div className="min-h-screen w-full bg-[#09090b] flex flex-col items-center justify-center text-[#a1a1aa] gap-3 select-none">
         <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-        <p className="text-xs font-medium tracking-wide">Memuat workspace...</p>
+        <p className="text-xs font-medium tracking-wide">
+          {isLoading ? 'Memuat akun...' : 'Mengambil data workspace dari cloud...'}
+        </p>
       </div>
     );
   }
@@ -840,7 +851,7 @@ function WorkspaceApp() {
         appData={appData}
         onStopTimer={handleStopTimer}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
-        onSignOut={signOut}
+        onSignOut={handleSignOut}
         onUpdateTheme={handleUpdateTheme}
         currentUser={currentUser}
         syncStatus={syncStatus}
@@ -850,7 +861,10 @@ function WorkspaceApp() {
       />
 
       {/* Main Content Area - Offset by Sidebar Width on Desktop, and padded bottom for Mobile Bottom Bar */}
-      <main className="flex-1 min-w-0 ml-0 md:ml-16 min-h-screen w-full overflow-x-hidden px-3 sm:px-6 lg:px-8 pt-4 pb-24 md:py-6">
+      <main
+        className="flex-1 min-w-0 ml-0 md:ml-16 min-h-screen w-full overflow-x-clip px-3 sm:px-6 lg:px-8 pt-4 pb-24 md:py-6"
+        style={{ overflowX: 'clip' }}
+      >
         <div className="w-full">
           {currentView === 'projects' && (
             <TreeView

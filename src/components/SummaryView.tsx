@@ -181,24 +181,28 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
     setPickerDate(new Date(currentDate));
   }, [currentDate]);
 
+  const isNoneProjects = selectedProjectId === 'none';
+  const isNonePersons = selectedPersonId === 'none';
+
   const selectedProjectIds = useMemo(() => {
-    if (!selectedProjectId || selectedProjectId === 'all') return [];
+    if (!selectedProjectId || selectedProjectId === 'all' || selectedProjectId === 'none') return [];
     return selectedProjectId.split(',').filter(Boolean);
   }, [selectedProjectId]);
 
   const selectedPersonIds = useMemo(() => {
-    if (!selectedPersonId || selectedPersonId === 'all') return [];
+    if (!selectedPersonId || selectedPersonId === 'all' || selectedPersonId === 'none') return [];
     return selectedPersonId.split(',').filter(Boolean);
   }, [selectedPersonId]);
 
   // Project filtering
   const activeProjects = useMemo(() => {
+    if (isNoneProjects) return [];
     const active = appData.projects.filter((p) => p.status === 'active');
     if (selectedProjectIds.length > 0) {
       return active.filter((p) => selectedProjectIds.includes(p.id));
     }
     return active;
-  }, [appData.projects, selectedProjectIds]);
+  }, [appData.projects, isNoneProjects, selectedProjectIds]);
 
   // Navigation handlers
   const handleToday = () => {
@@ -385,6 +389,7 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
 
     // Person filter helper matching TreeView / CalendarView recursive logic
     const matchesPerson = (node: ItemNode): boolean => {
+      if (isNonePersons) return false;
       if (selectedPersonIds.length === 0) return true;
       const hasPerson =
         (node.assigneeId && selectedPersonIds.includes(node.assigneeId)) ||
@@ -719,14 +724,14 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
 
       {/* Daily Grouped List */}
       {dailyGroups.length > 0 ? (
-        <div className="space-y-4 pt-1">
+        <div className="space-y-6 pt-1">
           {dailyGroups.map((group) => (
             <div
               key={group.dateKey}
-              className="bg-[#121215] border border-[#27272a] rounded-xl overflow-hidden shadow-lg"
+              className="space-y-0"
             >
               {/* Date Header */}
-              <div className="bg-[#18181b] px-4 py-3 border-b border-[#27272a] flex items-center justify-between">
+              <div className="px-1 py-2.5 border-b border-[#27272a] flex items-center justify-between select-none">
                 <h4 className="text-sm font-bold text-[#f4f4f5] flex items-center gap-2">
                   <CalendarIcon className="w-4 h-4 text-orange-500" />
                   <span>{group.dateLabel}</span>
@@ -737,7 +742,7 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
               </div>
 
               {/* List of Tasks for this Day */}
-              <div className="divide-y divide-[#27272a]/60">
+              <div className="flex flex-col">
                 {group.tasks.map((task) => (
                   <div
                     key={task.itemId}
@@ -746,7 +751,7 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
                         onOpenEditItemModal(task.item);
                       }
                     }}
-                    className="px-3.5 py-2 flex items-center justify-between gap-2 hover:bg-[#18181b] transition-colors cursor-pointer group"
+                    className="px-2 sm:px-3 py-2.5 flex items-center justify-between gap-2 hover:bg-[#18181b]/70 border-b border-[#27272a]/60 text-xs transition-colors cursor-pointer group"
                   >
                     {/* Left: Task Name with Project Info */}
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -829,16 +834,16 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
                                   <img
                                     src={assignee.avatar}
                                     alt={assignee.name}
-                                    className="w-5 h-5 rounded-full object-cover ring-1 ring-[#121215]"
+                                    className="w-5 h-5 rounded-full object-cover ring-1 ring-[#101010]"
                                   />
                                 ) : (
-                                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[9px] font-bold text-white uppercase ring-1 ring-[#121215]">
+                                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[9px] font-bold text-white uppercase ring-1 ring-[#101010]">
                                     {assignee.name.charAt(0).toUpperCase()}
                                   </div>
                                 )}
                               </div>
                             ) : task.item.assigneeId ? (
-                              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[9px] font-bold text-white uppercase ring-1 ring-[#121215] shrink-0">
+                              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[9px] font-bold text-white uppercase ring-1 ring-[#101010] shrink-0">
                                 {task.item.assigneeId.charAt(0).toUpperCase()}
                               </div>
                             ) : null}
@@ -849,10 +854,10 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
                                   <img
                                     src={reviewer.avatar}
                                     alt={reviewer.name}
-                                    className="w-5 h-5 rounded-full object-cover ring-1 ring-[#121215]"
+                                    className="w-5 h-5 rounded-full object-cover ring-1 ring-[#101010]"
                                   />
                                 ) : (
-                                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-[9px] font-bold text-white uppercase ring-1 ring-[#121215]">
+                                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-[9px] font-bold text-white uppercase ring-1 ring-[#101010]">
                                     {reviewer.name.charAt(0).toUpperCase()}
                                   </div>
                                 )}

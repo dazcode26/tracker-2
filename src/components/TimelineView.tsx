@@ -557,18 +557,22 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   const yearEndMs = new Date(currentYear, 11, 31, 23, 59, 59, 999).getTime();
   const totalYearMs = yearEndMs - yearStartMs;
 
+  const isNoneProjects = currentProjectId === 'none';
+  const isNonePersons = selectedPersonId === 'none';
+
   const selectedProjectIds = useMemo(() => {
-    if (!currentProjectId || currentProjectId === 'all') return [];
+    if (!currentProjectId || currentProjectId === 'all' || currentProjectId === 'none') return [];
     return currentProjectId.split(',').filter(Boolean);
   }, [currentProjectId]);
 
   const selectedPersonIds = useMemo(() => {
-    if (!selectedPersonId || selectedPersonId === 'all') return [];
+    if (!selectedPersonId || selectedPersonId === 'all' || selectedPersonId === 'none') return [];
     return selectedPersonId.split(',').filter(Boolean);
   }, [selectedPersonId]);
 
   // Helper to filter items if user selected one or more persons
   const matchesPerson = (item: ItemNode): boolean => {
+    if (isNonePersons) return false;
     if (selectedPersonIds.length === 0) return true;
     const hasPerson =
       (item.assigneeId && selectedPersonIds.includes(item.assigneeId)) ||
@@ -866,9 +870,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
 
   // Filtered projects by Project Filter, Person Filter, and Search
   const filteredProjects = activeProjects.filter((project) => {
+    if (isNoneProjects) return false;
     if (selectedProjectIds.length > 0 && !selectedProjectIds.includes(project.id)) {
       return false;
     }
+    if (isNonePersons) return false;
     if (selectedPersonIds.length > 0) {
       const hasMatchingPerson = (project.items || []).some((item) => matchesPerson(item));
       if (!hasMatchingPerson) return false;
