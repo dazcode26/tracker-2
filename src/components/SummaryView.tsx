@@ -246,7 +246,7 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
     if (granularity === 'day') {
       const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
       const dayName = daysOfWeek[(currentDate.getDay() + 6) % 7];
-      return `${dayName}, ${day} ${month} ${year}`;
+      return `${dayName.substring(0, 3)}, ${day} ${month.substring(0, 3)} ${year}`;
     }
 
     if (granularity === 'week') {
@@ -258,14 +258,14 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
       endDay.setDate(monday.getDate() + 6);
 
       if (monday.getMonth() === endDay.getMonth()) {
-        return `${monday.getDate()} – ${endDay.getDate()} ${MONTH_NAMES[monday.getMonth()]} ${year}`;
+        return `${monday.getDate()}-${endDay.getDate()} ${MONTH_NAMES[monday.getMonth()].substring(0, 3)} ${year}`;
       } else {
-        return `${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].substring(0, 3)} – ${endDay.getDate()} ${MONTH_NAMES[endDay.getMonth()].substring(0, 3)} ${year}`;
+        return `${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].substring(0, 3)} - ${endDay.getDate()} ${MONTH_NAMES[endDay.getMonth()].substring(0, 3)} ${year}`;
       }
     }
 
     if (granularity === 'month') {
-      return `${month} ${year}`;
+      return `${month.substring(0, 3)} ${year}`;
     }
 
     if (granularity === 'year') {

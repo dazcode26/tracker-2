@@ -110,6 +110,10 @@ interface TreeViewProps {
   onArchiveProject: (projectId: string) => void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
+  sortBy?: TreeSortBy;
+  onSortByChange?: (newSort: TreeSortBy) => void;
+  sortDirection?: TreeSortDirection;
+  onToggleSortDirection?: () => void;
 }
 
 export const TreeView: React.FC<TreeViewProps> = ({
@@ -137,6 +141,10 @@ export const TreeView: React.FC<TreeViewProps> = ({
   onArchiveProject,
   searchQuery = '',
   onSearchChange,
+  sortBy: externalSortBy,
+  onSortByChange: externalOnSortByChange,
+  sortDirection: externalSortDirection,
+  onToggleSortDirection: externalOnToggleSortDirection,
 }) => {
   interface MenuAnchorState {
     id: string;
@@ -198,8 +206,8 @@ export const TreeView: React.FC<TreeViewProps> = ({
   const [isProjectFilterOpen, setIsProjectFilterOpen] = useState<boolean>(false);
   const projectFilterRef = useRef<HTMLDivElement>(null);
 
-  // TreeView Sorting State (Persisted in localStorage for convenience)
-  const [sortBy, setSortBy] = useState<TreeSortBy>(() => {
+  // TreeView Sorting State (Controlled from App.tsx or Fallback to LocalStorage)
+  const [internalSortBy, setInternalSortBy] = useState<TreeSortBy>(() => {
     try {
       return (localStorage.getItem('tracker_tree_sort_by') as TreeSortBy) || 'default';
     } catch {
@@ -207,7 +215,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
     }
   });
 
-  const [sortDirection, setSortDirection] = useState<TreeSortDirection>(() => {
+  const [internalSortDirection, setInternalSortDirection] = useState<TreeSortDirection>(() => {
     try {
       return (localStorage.getItem('tracker_tree_sort_direction') as TreeSortDirection) || 'asc';
     } catch {
@@ -215,19 +223,30 @@ export const TreeView: React.FC<TreeViewProps> = ({
     }
   });
 
+  const sortBy = externalSortBy !== undefined ? externalSortBy : internalSortBy;
+  const sortDirection = externalSortDirection !== undefined ? externalSortDirection : internalSortDirection;
+
   const handleSortByChange = (newSort: TreeSortBy) => {
-    setSortBy(newSort);
-    try {
-      localStorage.setItem('tracker_tree_sort_by', newSort);
-    } catch {}
+    if (externalOnSortByChange) {
+      externalOnSortByChange(newSort);
+    } else {
+      setInternalSortBy(newSort);
+      try {
+        localStorage.setItem('tracker_tree_sort_by', newSort);
+      } catch {}
+    }
   };
 
   const handleToggleSortDirection = () => {
-    const nextDir = sortDirection === 'asc' ? 'desc' : 'asc';
-    setSortDirection(nextDir);
-    try {
-      localStorage.setItem('tracker_tree_sort_direction', nextDir);
-    } catch {}
+    if (externalOnToggleSortDirection) {
+      externalOnToggleSortDirection();
+    } else {
+      const nextDir = sortDirection === 'asc' ? 'desc' : 'asc';
+      setInternalSortDirection(nextDir);
+      try {
+        localStorage.setItem('tracker_tree_sort_direction', nextDir);
+      } catch {}
+    }
   };
 
   const currentProjectFilter = selectedProjectId || 'all';

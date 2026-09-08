@@ -27,6 +27,10 @@ interface KanbanViewProps {
   onSelectPersonFilter?: (personId: string) => void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
+  sortBy?: TreeSortBy;
+  onSortByChange?: (newSort: TreeSortBy) => void;
+  sortDirection?: TreeSortDirection;
+  onToggleSortDirection?: () => void;
 }
 
 export const KanbanView: React.FC<KanbanViewProps> = ({
@@ -44,6 +48,10 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   onSelectPersonFilter,
   searchQuery = '',
   onSearchChange,
+  sortBy: externalSortBy,
+  onSortByChange: externalOnSortByChange,
+  sortDirection: externalSortDirection,
+  onToggleSortDirection: externalOnToggleSortDirection,
 }) => {
   const [activeStatusAnchor, setActiveStatusAnchor] = useState<MenuAnchorState | null>(null);
 
@@ -65,8 +73,8 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   const currentProjectId = selectedProjectId !== undefined ? selectedProjectId : internalSelectedProjectId;
   const currentSearchQuery = searchQuery !== undefined ? searchQuery : internalSearchQuery;
 
-  // Kanban Sorting State (Persisted in localStorage for convenience)
-  const [sortBy, setSortBy] = useState<TreeSortBy>(() => {
+  // Kanban Sorting State (Controlled from App.tsx or Fallback to LocalStorage)
+  const [internalSortBy, setInternalSortBy] = useState<TreeSortBy>(() => {
     try {
       return (localStorage.getItem('tracker_kanban_sort_by') as TreeSortBy) || 'default';
     } catch {
@@ -74,7 +82,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     }
   });
 
-  const [sortDirection, setSortDirection] = useState<TreeSortDirection>(() => {
+  const [internalSortDirection, setInternalSortDirection] = useState<TreeSortDirection>(() => {
     try {
       return (localStorage.getItem('tracker_kanban_sort_direction') as TreeSortDirection) || 'asc';
     } catch {
@@ -82,19 +90,30 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     }
   });
 
+  const sortBy = externalSortBy !== undefined ? externalSortBy : internalSortBy;
+  const sortDirection = externalSortDirection !== undefined ? externalSortDirection : internalSortDirection;
+
   const handleSortByChange = (newSort: TreeSortBy) => {
-    setSortBy(newSort);
-    try {
-      localStorage.setItem('tracker_kanban_sort_by', newSort);
-    } catch {}
+    if (externalOnSortByChange) {
+      externalOnSortByChange(newSort);
+    } else {
+      setInternalSortBy(newSort);
+      try {
+        localStorage.setItem('tracker_kanban_sort_by', newSort);
+      } catch {}
+    }
   };
 
   const handleToggleSortDirection = () => {
-    const nextDir = sortDirection === 'asc' ? 'desc' : 'asc';
-    setSortDirection(nextDir);
-    try {
-      localStorage.setItem('tracker_kanban_sort_direction', nextDir);
-    } catch {}
+    if (externalOnToggleSortDirection) {
+      externalOnToggleSortDirection();
+    } else {
+      const nextDir = sortDirection === 'asc' ? 'desc' : 'asc';
+      setInternalSortDirection(nextDir);
+      try {
+        localStorage.setItem('tracker_kanban_sort_direction', nextDir);
+      } catch {}
+    }
   };
 
   const handleFilterChange = (projId: string) => {

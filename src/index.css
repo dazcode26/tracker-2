@@ -417,13 +417,17 @@
 [data-theme="light"] .bg-\[\#101010\]\/80,
 [data-theme="light"] .bg-\[\#09090b\],
 [data-theme="light"] .bg-\[\#0a0a0c\],
+[data-theme="light"] .bg-\[\#0e0e10\],
 [data-theme="light"] .bg-\[\#0e0e11\],
 [data-theme="light"] .bg-\[\#0f0f12\],
 [data-theme="light"] .bg-\[\#0f0f12\]\/60 {
   background-color: #f8fafc !important;
 }
 
+[data-theme="light"] .bg-\[\#121214\],
+[data-theme="light"] .bg-\[\#121214\]\/95,
 [data-theme="light"] .bg-\[\#121215\],
+[data-theme="light"] .bg-\[\#141416\],
 [data-theme="light"] .bg-\[\#141417\],
 [data-theme="light"] .bg-\[\#141418\],
 [data-theme="light"] .bg-\[\#16161a\],
@@ -522,6 +526,7 @@
 [data-theme="light"] .hover\:bg-\[\#18181b\]\/20:hover,
 [data-theme="light"] .hover\:bg-\[\#1a1a1f\]:hover,
 [data-theme="light"] .hover\:bg-\[\#18181c\]:hover,
+[data-theme="light"] .hover\:bg-\[\#1c1c20\]:hover,
 [data-theme="light"] .hover\:bg-\[\#202025\]:hover,
 [data-theme="light"] .hover\:bg-\[\#27272a\]:hover,
 [data-theme="light"] .hover\:bg-\[\#27272a\]\/30:hover,

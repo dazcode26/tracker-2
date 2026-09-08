@@ -256,7 +256,7 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
             <button
               type="button"
               onClick={() => onOpenProjectModal()}
-              className="h-8 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white text-xs font-bold px-3 sm:px-3.5 rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/20 hover:shadow-orange-500/30 cursor-pointer shrink-0 whitespace-nowrap"
+              className="h-8 w-[108px] sm:w-32 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white text-xs font-bold px-2 sm:px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/20 hover:shadow-orange-500/30 cursor-pointer shrink-0 whitespace-nowrap"
               title="Create New Project"
             >
               <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
@@ -279,7 +279,7 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                 className={`h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-lg border text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0 max-w-[160px] xs:max-w-[190px] sm:max-w-[210px] md:max-w-[220px] ${
                   !isAllProjectsSelected
                     ? 'bg-orange-500/15 border-orange-500/50 text-orange-400'
-                    : 'bg-[#18181b] border-[#27272a] hover:bg-[#27272a] text-[#f4f4f5] hover:border-orange-500/40'
+                    : 'bg-[#18181b] [data-theme=light]:bg-white border-[#27272a] [data-theme=light]:border-[#e2e8f0] hover:bg-[#27272a] [data-theme=light]:hover:bg-slate-100 text-[#f4f4f5] [data-theme=light]:text-slate-800 hover:border-orange-500/40'
                 }`}
                 title="Filter by Project"
               >
@@ -419,8 +419,8 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                   onClick={handleTogglePersonDropdown}
                   className={`h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-lg border text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0 max-w-[140px] xs:max-w-[170px] sm:max-w-[190px] md:max-w-[200px] ${
                     !isAllPersonsSelected
-                      ? 'bg-indigo-500/15 border-indigo-500/50 text-indigo-400'
-                      : 'bg-[#18181b] border-[#27272a] hover:bg-[#27272a] text-[#f4f4f5] hover:border-orange-500/40'
+                      ? 'bg-orange-500/15 border-orange-500/50 text-orange-400'
+                      : 'bg-[#18181b] [data-theme=light]:bg-white border-[#27272a] [data-theme=light]:border-[#e2e8f0] hover:bg-[#27272a] [data-theme=light]:hover:bg-slate-100 text-[#f4f4f5] [data-theme=light]:text-slate-800 hover:border-orange-500/40'
                   }`}
                   title="Filter by Team Member (Assignee & Reviewer)"
                 >
@@ -460,7 +460,7 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                     <>
                       <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                       <span className="truncate">{selectedPersonIds.length} Members</span>
-                      <span className="px-1.5 py-0.2 bg-indigo-500/20 text-indigo-400 text-[10px] font-mono font-bold rounded-full shrink-0">
+                      <span className="px-1.5 py-0.2 bg-orange-500/20 text-orange-400 text-[10px] font-mono font-bold rounded-full shrink-0">
                         {selectedPersonIds.length}
                       </span>
                     </>
@@ -611,7 +611,7 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                   <button
                     type="button"
                     onClick={handleToggleSortDropdown}
-                    className="h-8 flex items-center gap-1.5 px-2 sm:px-2.5 rounded-lg bg-[#18181b] border border-[#27272a] hover:bg-[#27272a] text-[#f4f4f5] text-xs font-semibold shadow-xs hover:border-orange-500/40 transition-all cursor-pointer shrink-0"
+                    className="h-8 flex items-center gap-1.5 px-2 sm:px-2.5 rounded-lg bg-[#18181b] [data-theme=light]:bg-white border border-[#27272a] [data-theme=light]:border-[#e2e8f0] hover:bg-[#27272a] [data-theme=light]:hover:bg-slate-100 text-[#f4f4f5] [data-theme=light]:text-slate-800 text-xs font-semibold shadow-xs hover:border-orange-500/40 transition-all cursor-pointer shrink-0"
                     title="Sort Tasks"
                   >
                     <ArrowUpDown className="w-3.5 h-3.5 text-[#a1a1aa] shrink-0" />
@@ -732,11 +732,10 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
               <button
                 type="button"
                 onClick={handleResetAllFilters}
-                className="h-8 px-2 rounded-lg text-xs font-medium text-[#71717a] hover:text-orange-400 hover:bg-[#27272a]/70 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                className="h-8 px-2.5 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 hover:text-orange-300 text-[11px] font-medium transition-colors cursor-pointer shrink-0"
                 title="Reset all filters, search, and sorting"
               >
-                <RotateCcw className="w-3 h-3" />
-                <span className="hidden xl:inline text-[11px]">Reset</span>
+                Reset
               </button>
             )}
           </div>

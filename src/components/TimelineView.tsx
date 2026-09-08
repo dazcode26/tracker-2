@@ -974,7 +974,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
 
     if (timeScale === 'day') {
       const dayName = englishDays[currentDate.getDay()];
-      return `${dayName}, ${day} ${month} ${year}`;
+      return `${dayName.substring(0, 3)}, ${day} ${month.substring(0, 3)} ${year}`;
     }
 
     if (timeScale === 'week') {
@@ -984,16 +984,16 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       const lastDayYear = lastDay.getFullYear();
 
       if (mon.getMonth() === lastDay.getMonth() && monYear === lastDayYear) {
-        return `${mon.getDate()} – ${lastDay.getDate()} ${monthNames[mon.getMonth()]} ${monYear}`;
+        return `${mon.getDate()}-${lastDay.getDate()} ${monthNames[mon.getMonth()].substring(0, 3)} ${monYear}`;
       } else if (monYear === lastDayYear) {
-        return `${mon.getDate()} ${monthNames[mon.getMonth()].substring(0, 3)} – ${lastDay.getDate()} ${monthNames[lastDay.getMonth()].substring(0, 3)} ${monYear}`;
+        return `${mon.getDate()} ${monthNames[mon.getMonth()].substring(0, 3)} - ${lastDay.getDate()} ${monthNames[lastDay.getMonth()].substring(0, 3)} ${monYear}`;
       } else {
-        return `${mon.getDate()} ${monthNames[mon.getMonth()].substring(0, 3)} ${monYear} – ${lastDay.getDate()} ${monthNames[lastDay.getMonth()].substring(0, 3)} ${lastDayYear}`;
+        return `${mon.getDate()} ${monthNames[mon.getMonth()].substring(0, 3)} ${monYear} - ${lastDay.getDate()} ${monthNames[lastDay.getMonth()].substring(0, 3)} ${lastDayYear}`;
       }
     }
 
     if (timeScale === 'month') {
-      return `${month} ${year}`;
+      return `${month.substring(0, 3)} ${year}`;
     }
 
     return '';

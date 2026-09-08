@@ -100,7 +100,7 @@ export interface AppData {
   _lastModified?: number;
 }
 
-export type ViewMode = 'dashboard' | 'projects' | 'notion' | 'tasks' | 'timeline' | 'calendar' | 'analytics' | 'team' | 'archived';
+export type ViewMode = 'dashboard' | 'projects' | 'gantt' | 'tasks' | 'timeline' | 'calendar' | 'analytics' | 'team' | 'archived';
 
 export type TimeScale = 'day' | 'week' | 'month' | 'year';
 export type CalendarViewType = TimeScale;

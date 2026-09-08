@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import { AppData, ItemNode, ItemStatus, Person, ProjectNode, ProjectStatus, ViewMode, Session, TimeScale, AppTheme, AccentColor } from './types';
+import { TreeSortBy, TreeSortDirection } from './utils/treeSorting';
 import { initialAppData } from './defaultData';
 import { Header } from './components/Header';
 import { TreeView } from './components/TreeView';
-import { NotionTreeView } from './components/NotionTreeView';
+import { GanttView } from './components/GanttView';
 import { KanbanView } from './components/KanbanView';
 import { TimelineView } from './components/TimelineView';
 import { CalendarView } from './components/CalendarView';
@@ -221,6 +222,60 @@ function WorkspaceApp() {
     setSelectedPersonId(personId);
     try {
       localStorage.setItem('struktur_filter_person_id', personId);
+    } catch {
+      // ignore
+    }
+  };
+
+  // Shared Sorting State synchronized across TreeView, NotionTreeView, and KanbanView
+  const [sortBy, setSortBy] = useState<TreeSortBy>(() => {
+    try {
+      const saved =
+        localStorage.getItem('tracker_global_sort_by') ||
+        localStorage.getItem('tracker_tree_sort_by') ||
+        localStorage.getItem('tracker_kanban_sort_by');
+      if (saved && ['default', 'name', 'sessions', 'duration', 'status'].includes(saved)) {
+        return saved as TreeSortBy;
+      }
+    } catch {
+      // ignore
+    }
+    return 'default';
+  });
+
+  const [sortDirection, setSortDirection] = useState<TreeSortDirection>(() => {
+    try {
+      const saved =
+        localStorage.getItem('tracker_global_sort_direction') ||
+        localStorage.getItem('tracker_tree_sort_direction') ||
+        localStorage.getItem('tracker_kanban_sort_direction');
+      if (saved && ['asc', 'desc'].includes(saved)) {
+        return saved as TreeSortDirection;
+      }
+    } catch {
+      // ignore
+    }
+    return 'asc';
+  });
+
+  const handleSortByChange = (newSort: TreeSortBy) => {
+    setSortBy(newSort);
+    try {
+      localStorage.setItem('tracker_global_sort_by', newSort);
+      localStorage.setItem('tracker_tree_sort_by', newSort);
+      localStorage.setItem('tracker_kanban_sort_by', newSort);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleToggleSortDirection = () => {
+    const nextDir = sortDirection === 'asc' ? 'desc' : 'asc';
+    setSortDirection(nextDir);
+    try {
+      localStorage.setItem('tracker_global_sort_direction', nextDir);
+      localStorage.setItem('tracker_tree_sort_direction', nextDir);
+      localStorage.setItem('tracker_kanban_sort_direction', nextDir);
     } catch {
       // ignore
     }
@@ -892,30 +947,38 @@ function WorkspaceApp() {
               onArchiveProject={handleArchiveProject}
               searchQuery={searchQuery}
               onSearchChange={handleSearchQueryChange}
+              sortBy={sortBy}
+              onSortByChange={handleSortByChange}
+              sortDirection={sortDirection}
+              onToggleSortDirection={handleToggleSortDirection}
             />
           )}
 
-          {currentView === 'notion' && (
-            <NotionTreeView
+          {currentView === 'gantt' && (
+            <GanttView
               appData={appData}
-              onUpdateItemStatus={handleUpdateItemStatus}
               onOpenEditItemModal={openEditItemModal}
               onOpenAddItemModal={openAddItemModal}
-              onDeleteItem={handleDeleteItem}
-              onReorderItem={handleReorderItem}
-              onDuplicateItem={handleDuplicateItem}
-              onToggleExpand={handleToggleItemExpand}
-              onSetAllExpand={handleSetAllExpand}
-              onSaveData={persistData}
+              onOpenProjectModal={openProjectModal}
+              onUpdateItemStatus={handleUpdateItemStatus}
               onStartTimer={handleStartTimer}
               onStopTimer={handleStopTimer}
+              onToggleExpand={handleToggleItemExpand}
+              onSetAllExpand={handleSetAllExpand}
               selectedProjectId={selectedProjectId}
               onSelectProjectFilter={handleSelectProjectFilter}
               selectedPersonId={selectedPersonId}
               onSelectPersonFilter={handleSelectPersonFilter}
               searchQuery={searchQuery}
               onSearchChange={handleSearchQueryChange}
-              onOpenProjectModal={openProjectModal}
+              timeScale={timeScale}
+              onTimeScaleChange={handleTimeScaleChange}
+              currentDate={currentReferenceDate}
+              onCurrentDateChange={handleReferenceDateChange}
+              showWeekends={showWeekends}
+              onShowWeekendsChange={handleShowWeekendsChange}
+              showCompleted={showCompleted}
+              onShowCompletedChange={handleShowCompletedChange}
             />
           )}
 
@@ -935,6 +998,10 @@ function WorkspaceApp() {
               onSelectPersonFilter={handleSelectPersonFilter}
               searchQuery={searchQuery}
               onSearchChange={handleSearchQueryChange}
+              sortBy={sortBy}
+              onSortByChange={handleSortByChange}
+              sortDirection={sortDirection}
+              onToggleSortDirection={handleToggleSortDirection}
             />
           )}
 
