@@ -15,6 +15,7 @@ import {
 import { Person, ProjectNode } from '../types';
 import { TreeSortBy, TreeSortDirection, TREE_SORT_OPTIONS } from '../utils/treeSorting';
 import { useHeadroom } from '../hooks/useHeadroom';
+import { PortalMenu } from './PortalMenu';
 
 export interface StructureToolbarProps {
   // Project Filter
@@ -56,77 +57,44 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
   onSearchChange,
   onOpenProjectModal,
 }) => {
-  const [isProjectFilterOpen, setIsProjectFilterOpen] = useState(false);
-  const [isPersonFilterOpen, setIsPersonFilterOpen] = useState(false);
-  const [isSortFilterOpen, setIsSortFilterOpen] = useState(false);
-  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
-  const projectFilterRef = useRef<HTMLDivElement>(null);
-  const personFilterRef = useRef<HTMLDivElement>(null);
-  const sortFilterRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [projectAnchor, setProjectAnchor] = useState<{ rect: DOMRect; el: HTMLElement } | null>(null);
+  const [personAnchor, setPersonAnchor] = useState<{ rect: DOMRect; el: HTMLElement } | null>(null);
+  const [sortAnchor, setSortAnchor] = useState<{ rect: DOMRect; el: HTMLElement } | null>(null);
 
-  // Focus search input when mobile search is opened
-  useEffect(() => {
-    if (isMobileSearchOpen && searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  }, [isMobileSearchOpen]);
+  const isProjectFilterOpen = Boolean(projectAnchor);
+  const isPersonFilterOpen = Boolean(personAnchor);
+  const isSortFilterOpen = Boolean(sortAnchor);
 
-  // Click outside listener & Escape key handler
-  useEffect(() => {
-    const handleClickOutside = (event: Event) => {
-      const target = event.target as Node;
-      if (
-        projectFilterRef.current &&
-        !projectFilterRef.current.contains(target)
-      ) {
-        setIsProjectFilterOpen(false);
-      }
-      if (
-        personFilterRef.current &&
-        !personFilterRef.current.contains(target)
-      ) {
-        setIsPersonFilterOpen(false);
-      }
-      if (
-        sortFilterRef.current &&
-        !sortFilterRef.current.contains(target)
-      ) {
-        setIsSortFilterOpen(false);
-      }
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsProjectFilterOpen(false);
-        setIsPersonFilterOpen(false);
-        setIsSortFilterOpen(false);
-      }
-    };
-
-    document.addEventListener('pointerdown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
-
-  const handleCloseMobileSearch = () => {
-    onSearchChange('');
-    setIsMobileSearchOpen(false);
-  };
-
-  const handleClearSearch = () => {
-    onSearchChange('');
-    if (searchInputRef.current) {
-      searchInputRef.current.focus();
+  const handleToggleProjectDropdown = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (isProjectFilterOpen) {
+      setProjectAnchor(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setProjectAnchor({ rect, el: e.currentTarget });
+      setPersonAnchor(null);
+      setSortAnchor(null);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') {
-      handleCloseMobileSearch();
+  const handleTogglePersonDropdown = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (isPersonFilterOpen) {
+      setPersonAnchor(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setPersonAnchor({ rect, el: e.currentTarget });
+      setProjectAnchor(null);
+      setSortAnchor(null);
+    }
+  };
+
+  const handleToggleSortDropdown = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (isSortFilterOpen) {
+      setSortAnchor(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setSortAnchor({ rect, el: e.currentTarget });
+      setProjectAnchor(null);
+      setPersonAnchor(null);
     }
   };
 
@@ -228,112 +196,136 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
     }
   };
 
-  const isAnyMenuOpen = isProjectFilterOpen || isPersonFilterOpen || isSortFilterOpen || isMobileSearchOpen;
+  const hasActiveFilters =
+    !isAllProjectsSelected ||
+    (persons.length > 0 && !isAllPersonsSelected) ||
+    isNonDefaultSort ||
+    Boolean(searchQuery.trim());
+
+  const handleResetAllFilters = () => {
+    onSelectProject('all');
+    if (onSelectPerson) onSelectPerson('all');
+    if (onSortByChange) onSortByChange('default');
+    if (searchQuery) onSearchChange('');
+  };
+
+  const isAnyMenuOpen = isProjectFilterOpen || isPersonFilterOpen || isSortFilterOpen;
   const { isSticky, isVisible } = useHeadroom({ forceVisible: isAnyMenuOpen });
 
   return (
     <div
       className={`sticky top-0 z-30 transition-opacity duration-200 ease-out ${
         isSticky
-          ? `py-2.5 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 bg-[#101010]/95 dark:bg-[#101010]/95 [data-theme=light]:bg-[#f8fafc]/95 backdrop-blur-md border-b border-[#27272a] [data-theme=light]:border-[#e2e8f0] shadow-lg shadow-black/25 ${
+          ? `py-2 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 bg-[#101010]/95 dark:bg-[#101010]/95 [data-theme=light]:bg-[#f8fafc]/95 backdrop-blur-md border-b border-[#27272a] [data-theme=light]:border-[#e2e8f0] shadow-lg shadow-black/25 ${
               isVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
             }`
           : 'opacity-100 py-0'
       }`}
     >
-      <div className="max-w-[1400px] mx-auto">
-        <div className={`flex items-center justify-between gap-2 sm:gap-3 ${isSticky ? 'h-8 sm:h-9' : 'pb-2 border-b border-[#27272a] h-10'} relative`}>
-          {/* MOBILE / TABLET FULL-WIDTH SEARCH BAR (Spans the entire toolbar on < md, covering filters on left & Add Project on right) */}
-      {isMobileSearchOpen && (
-        <div className="md:hidden flex items-center gap-2 w-full h-full animate-in fade-in duration-150">
-          <div className="relative flex-1 min-w-0">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#71717a] pointer-events-none" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search projects, tasks, milestones..."
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="w-full h-8 pl-8.5 pr-8 rounded-xl bg-[#18181b] border border-orange-500/50 text-xs text-[#f4f4f5] placeholder-[#71717a] focus:outline-none shadow-sm transition-all"
-            />
-            {searchQuery && (
+      <div className="max-w-[1400px] mx-auto w-full">
+        <div
+          className={`flex flex-wrap md:flex-nowrap items-center justify-between gap-y-2 gap-x-2 md:gap-3 ${
+            isSticky ? 'py-1 md:py-0 md:h-9' : 'pb-2 border-b border-[#27272a] [data-theme=light]:border-[#e2e8f0]'
+          } relative w-full`}
+        >
+          {/* ACTIONS: ROW 1 ON MOBILE (order-1 w-full), RIGHT SIDE ON DESKTOP (order-2 md:w-auto md:ml-auto) */}
+          <div className="order-1 w-full md:w-auto md:order-2 flex items-center gap-2 md:ml-auto shrink-0">
+            {/* Search Input: Expands full remaining width on mobile, compact fixed width on desktop */}
+            <div className="relative flex-1 md:flex-none min-w-0">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#71717a] [data-theme=light]:text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search projects, tasks..."
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                className="w-full md:w-36 lg:w-44 h-8 pl-8 pr-7 rounded-lg bg-[#18181b] [data-theme=light]:bg-white border border-[#27272a] [data-theme=light]:border-[#e2e8f0] text-xs text-[#f4f4f5] [data-theme=light]:text-[#0f172a] placeholder-[#71717a] [data-theme=light]:placeholder-slate-400 focus:outline-none focus:border-orange-500/50 shadow-xs transition-all"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => onSearchChange('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[#71717a] [data-theme=light]:text-slate-400 hover:text-white [data-theme=light]:hover:text-slate-700 cursor-pointer p-0.5 rounded-full hover:bg-[#27272a] [data-theme=light]:hover:bg-slate-100 transition-colors"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Primary Action Button: + New Project */}
+            <button
+              type="button"
+              onClick={() => onOpenProjectModal()}
+              className="h-8 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white text-xs font-bold px-3 sm:px-3.5 rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/20 hover:shadow-orange-500/30 cursor-pointer shrink-0 whitespace-nowrap"
+              title="Create New Project"
+            >
+              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+              <span>
+                <span className="hidden sm:inline">New </span>Project
+              </span>
+            </button>
+          </div>
+
+          {/* FILTERS & SORTING: ROW 2 ON MOBILE (order-2 w-full), LEFT SIDE ON DESKTOP (order-1 md:w-auto md:flex-1) */}
+          <div
+            className="order-2 w-full md:w-auto md:order-1 md:flex-1 md:min-w-0 flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto scrollbar-none py-0.5"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+            {/* Project Selector Multi-select Dropdown with Checkboxes */}
+            <div className="relative shrink-0">
               <button
                 type="button"
-                onClick={handleClearSearch}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717a] hover:text-white cursor-pointer p-0.5 rounded-full hover:bg-[#27272a] transition-colors"
-                title="Clear search text"
+                onClick={handleToggleProjectDropdown}
+                className={`h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-lg border text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0 max-w-[160px] xs:max-w-[190px] sm:max-w-[210px] md:max-w-[220px] ${
+                  !isAllProjectsSelected
+                    ? 'bg-orange-500/15 border-orange-500/50 text-orange-400'
+                    : 'bg-[#18181b] border-[#27272a] hover:bg-[#27272a] text-[#f4f4f5] hover:border-orange-500/40'
+                }`}
+                title="Filter by Project"
               >
-                <X className="w-3.5 h-3.5" />
+                {isAllProjectsSelected ? (
+                  <>
+                    <Folder className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                    <span className="truncate">All Projects</span>
+                  </>
+                ) : isNoneProjects || selectedProjectIds.length === 0 ? (
+                  <>
+                    <Folder className="w-3.5 h-3.5 text-[#71717a] shrink-0" />
+                    <span className="truncate text-[#a1a1aa]">0 Projects</span>
+                  </>
+                ) : selectedProjectIds.length === 1 ? (
+                  <>
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{
+                        backgroundColor:
+                          activeProjects.find((p) => p.id === selectedProjectIds[0])?.color || '#f97316',
+                      }}
+                    />
+                    <span className="truncate">
+                      {activeProjects.find((p) => p.id === selectedProjectIds[0])?.title || '1 Project'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Folder className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                    <span className="truncate">{selectedProjectIds.length} Projects</span>
+                    <span className="px-1.5 py-0.2 bg-orange-500/20 text-orange-400 text-[10px] font-mono font-bold rounded-full shrink-0">
+                      {selectedProjectIds.length}
+                    </span>
+                  </>
+                )}
+                <ChevronDown className="w-3 h-3 text-[#71717a] shrink-0 ml-auto" />
               </button>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={handleCloseMobileSearch}
-            className="h-8 px-2.5 rounded-xl text-xs font-semibold text-orange-400 hover:text-orange-300 hover:bg-[#27272a] transition-colors cursor-pointer shrink-0"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
 
-      {/* NORMAL TOOLBAR CONTENT (Hidden on < md when search is open, always visible on md+) */}
-      <div className={`items-center gap-1.5 sm:gap-2 flex-nowrap shrink-0 min-w-0 ${isMobileSearchOpen ? 'hidden md:flex' : 'flex'}`}>
-        {/* Project Selector Multi-select Dropdown with Checkboxes */}
-        <div className="relative shrink-0" ref={projectFilterRef}>
-          <button
-            type="button"
-            onClick={() => {
-              setIsProjectFilterOpen(!isProjectFilterOpen);
-              setIsPersonFilterOpen(false);
-              setIsSortFilterOpen(false);
-            }}
-            className="h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-xl bg-[#18181b] border border-[#27272a] hover:bg-[#27272a] text-[#f4f4f5] text-xs font-semibold shadow-xs hover:border-orange-500/40 transition-all cursor-pointer max-w-[130px] xs:max-w-[150px] sm:max-w-[180px] md:max-w-[210px]"
-            title="Filter by Project"
-          >
-            {isAllProjectsSelected ? (
-              <>
-                <Folder className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-                <span className="truncate">All Projects</span>
-              </>
-            ) : isNoneProjects || selectedProjectIds.length === 0 ? (
-              <>
-                <Folder className="w-3.5 h-3.5 text-[#71717a] shrink-0" />
-                <span className="truncate text-[#a1a1aa]">0 Projects</span>
-              </>
-            ) : selectedProjectIds.length === 1 ? (
-              <>
-                <span
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{
-                    backgroundColor:
-                      activeProjects.find((p) => p.id === selectedProjectIds[0])?.color || '#f97316',
-                  }}
-                />
-                <span className="truncate">
-                  {activeProjects.find((p) => p.id === selectedProjectIds[0])?.title || '1 Project'}
-                </span>
-              </>
-            ) : (
-              <>
-                <Folder className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-                <span className="truncate">{selectedProjectIds.length} Projects</span>
-                <span className="px-1.5 py-0.2 bg-orange-500/20 text-orange-400 text-[10px] font-mono font-bold rounded-full shrink-0">
-                  {selectedProjectIds.length}
-                </span>
-              </>
-            )}
-            <ChevronDown className="w-3 h-3 text-[#71717a] shrink-0 ml-auto" />
-          </button>
-
-          {isProjectFilterOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setIsProjectFilterOpen(false)}
-              />
-              <div className="absolute left-0 mt-1.5 w-64 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 max-h-72 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+              <PortalMenu
+                isOpen={isProjectFilterOpen}
+                onClose={() => setProjectAnchor(null)}
+                anchorRect={projectAnchor?.rect || null}
+                triggerElement={projectAnchor?.el || null}
+                align="left"
+                className="w-64 max-h-72 overflow-y-auto flex flex-col gap-1"
+              >
                 {/* Header row with quick actions */}
                 <div className="flex items-center justify-between px-1.5 py-0.5">
                   <span className="text-[10px] uppercase font-bold tracking-wider text-[#71717a]">
@@ -416,75 +408,74 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                     );
                   })}
                 </div>
-              </div>
-            </>
-          )}
-        </div>
+              </PortalMenu>
+            </div>
 
-        {/* TEAM Filter Multi-select Dropdown with Checkboxes */}
-        {persons && persons.length > 0 && onSelectPerson && (
-          <div className="relative shrink-0" ref={personFilterRef}>
-            <button
-              type="button"
-              onClick={() => {
-                setIsPersonFilterOpen(!isPersonFilterOpen);
-                setIsProjectFilterOpen(false);
-                setIsSortFilterOpen(false);
-              }}
-              className="h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-xl bg-[#18181b] border border-[#27272a] hover:bg-[#27272a] text-[#f4f4f5] text-xs font-semibold shadow-xs hover:border-orange-500/40 transition-all cursor-pointer max-w-[125px] xs:max-w-[145px] sm:max-w-[175px] md:max-w-[200px]"
-              title="Filter by Team Member (Assignee & Reviewer)"
-            >
-              {isAllPersonsSelected ? (
-                <>
-                  <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  <span className="truncate">All Team</span>
-                </>
-              ) : isNonePersons || selectedPersonIds.length === 0 ? (
-                <>
-                  <Users className="w-3.5 h-3.5 text-[#71717a] shrink-0" />
-                  <span className="truncate text-[#a1a1aa]">0 Members</span>
-                </>
-              ) : selectedPersonIds.length === 1 ? (
-                <>
-                  {(() => {
-                    const u = persons.find((p) => p.id === selectedPersonIds[0]);
-                    return (
-                      <>
-                        {u?.avatar ? (
-                          <img
-                            src={u.avatar}
-                            alt={u.name}
-                            className="w-4 h-4 rounded-full object-cover shrink-0 ring-1 ring-white/10"
-                          />
-                        ) : (
-                          <span className="w-4 h-4 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[9px] font-bold text-white uppercase shrink-0">
-                            {u?.name ? u.name.charAt(0).toUpperCase() : 'U'}
-                          </span>
-                        )}
-                        <span className="truncate">{u?.name || '1 Member'}</span>
-                      </>
-                    );
-                  })()}
-                </>
-              ) : (
-                <>
-                  <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  <span className="truncate">{selectedPersonIds.length} Members</span>
-                  <span className="px-1.5 py-0.2 bg-indigo-500/20 text-indigo-400 text-[10px] font-mono font-bold rounded-full shrink-0">
-                    {selectedPersonIds.length}
-                  </span>
-                </>
-              )}
-              <ChevronDown className="w-3 h-3 text-[#71717a] shrink-0 ml-auto" />
-            </button>
+            {/* TEAM Filter Multi-select Dropdown with Checkboxes */}
+            {persons && persons.length > 0 && onSelectPerson && (
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={handleTogglePersonDropdown}
+                  className={`h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-lg border text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0 max-w-[140px] xs:max-w-[170px] sm:max-w-[190px] md:max-w-[200px] ${
+                    !isAllPersonsSelected
+                      ? 'bg-indigo-500/15 border-indigo-500/50 text-indigo-400'
+                      : 'bg-[#18181b] border-[#27272a] hover:bg-[#27272a] text-[#f4f4f5] hover:border-orange-500/40'
+                  }`}
+                  title="Filter by Team Member (Assignee & Reviewer)"
+                >
+                  {isAllPersonsSelected ? (
+                    <>
+                      <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                      <span className="truncate">All Team</span>
+                    </>
+                  ) : isNonePersons || selectedPersonIds.length === 0 ? (
+                    <>
+                      <Users className="w-3.5 h-3.5 text-[#71717a] shrink-0" />
+                      <span className="truncate text-[#a1a1aa]">0 Members</span>
+                    </>
+                  ) : selectedPersonIds.length === 1 ? (
+                    <>
+                      {(() => {
+                        const u = persons.find((p) => p.id === selectedPersonIds[0]);
+                        return (
+                          <>
+                            {u?.avatar ? (
+                              <img
+                                src={u.avatar}
+                                alt={u.name}
+                                className="w-4 h-4 rounded-full object-cover shrink-0 ring-1 ring-white/10"
+                              />
+                            ) : (
+                              <span className="w-4 h-4 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[9px] font-bold text-white uppercase shrink-0">
+                                {u?.name ? u.name.charAt(0).toUpperCase() : 'U'}
+                              </span>
+                            )}
+                            <span className="truncate">{u?.name || '1 Member'}</span>
+                          </>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    <>
+                      <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                      <span className="truncate">{selectedPersonIds.length} Members</span>
+                      <span className="px-1.5 py-0.2 bg-indigo-500/20 text-indigo-400 text-[10px] font-mono font-bold rounded-full shrink-0">
+                        {selectedPersonIds.length}
+                      </span>
+                    </>
+                  )}
+                  <ChevronDown className="w-3 h-3 text-[#71717a] shrink-0 ml-auto" />
+                </button>
 
-            {isPersonFilterOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setIsPersonFilterOpen(false)}
-                />
-                <div className="absolute left-0 mt-1.5 w-64 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 max-h-72 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                <PortalMenu
+                  isOpen={isPersonFilterOpen}
+                  onClose={() => setPersonAnchor(null)}
+                  anchorRect={personAnchor?.rect || null}
+                  triggerElement={personAnchor?.el || null}
+                  align="left"
+                  className="w-64 max-h-72 overflow-y-auto flex flex-col gap-1"
+                >
                   <div className="flex items-center justify-between px-1.5 py-0.5">
                     <span className="text-[10px] uppercase font-bold tracking-wider text-[#71717a]">
                       Filter Team
@@ -575,217 +566,183 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                       );
                     })}
                   </div>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* SORT Dropdown & Direction Toggle */}
-        {onSortByChange && (
-          <div className="relative shrink-0 flex items-center gap-1" ref={sortFilterRef}>
-            <button
-              type="button"
-              onClick={() => {
-                setIsSortFilterOpen(!isSortFilterOpen);
-                setIsProjectFilterOpen(false);
-                setIsPersonFilterOpen(false);
-              }}
-              className={`h-8 flex items-center gap-1.5 px-2.5 rounded-xl border text-xs font-semibold shadow-xs transition-all cursor-pointer ${
-                isNonDefaultSort
-                  ? 'bg-orange-500/15 border-orange-500/50 text-orange-400 font-bold hover:bg-orange-500/25'
-                  : 'bg-[#18181b] border-[#27272a] text-[#f4f4f5] hover:bg-[#27272a] hover:border-orange-500/40'
-              }`}
-              title="Sort Tasks"
-            >
-              <ArrowUpDown className={`w-3.5 h-3.5 shrink-0 ${isNonDefaultSort ? 'text-orange-400' : 'text-[#a1a1aa]'}`} />
-              <span className="font-semibold tracking-wide">
-                {activeSortOption.shortLabel}
-              </span>
-              <ChevronDown className="w-3 h-3 text-[#71717a] shrink-0" />
-            </button>
-
-            {/* Ascending / Descending Direction Toggle Button */}
-            {isNonDefaultSort && onToggleSortDirection && (
-              <button
-                type="button"
-                onClick={onToggleSortDirection}
-                className="h-8 w-8 rounded-xl bg-orange-500/15 border border-orange-500/40 hover:bg-orange-500/25 flex items-center justify-center text-orange-400 hover:text-orange-300 transition-all cursor-pointer shrink-0"
-                title={`Order: ${
-                  sortDirection === 'asc'
-                    ? 'Ascending (A–Z / Low to High)'
-                    : 'Descending (Z–A / High to Low)'
-                } - Click to reverse`}
-              >
-                {sortDirection === 'asc' ? (
-                  <ArrowUp className="w-3.5 h-3.5" />
-                ) : (
-                  <ArrowDown className="w-3.5 h-3.5" />
-                )}
-              </button>
+                </PortalMenu>
+              </div>
             )}
 
-            {isSortFilterOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setIsSortFilterOpen(false)}
-                />
-                <div className="absolute left-0 top-full mt-1.5 w-64 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-2 py-1 flex items-center justify-between border-b border-[#27272a]">
-                  <span className="text-[11px] font-bold text-[#a1a1aa] uppercase tracking-wider">
-                    Sort Tasks (Hierarchical)
-                  </span>
-                  {isNonDefaultSort && (
+            {/* Subtle Group Divider between Filters and Sort */}
+            {onSortByChange && (
+              <div className="h-4 w-px bg-[#27272a] hidden xs:block shrink-0 mx-0.5" />
+            )}
+
+            {/* UNIFIED SORT CONTROL */}
+            {onSortByChange && (
+              <div className="relative shrink-0">
+                {isNonDefaultSort ? (
+                  /* Active Sort: Segmented Unified Control */
+                  <div className="inline-flex items-center h-8 rounded-lg border border-orange-500/50 bg-orange-500/15 overflow-hidden shadow-xs shrink-0">
                     <button
                       type="button"
-                      onClick={() => {
-                        onSortByChange('default');
-                        setIsSortFilterOpen(false);
-                      }}
-                      className="text-[10px] text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1 cursor-pointer"
+                      onClick={handleToggleSortDropdown}
+                      className="h-full flex items-center gap-1.5 px-2 sm:px-2.5 text-xs font-bold text-orange-400 hover:bg-orange-500/20 transition-colors cursor-pointer"
+                      title="Change Sort Criteria"
                     >
-                      <RotateCcw className="w-3 h-3" />
-                      Reset
+                      <ArrowUpDown className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                      <span>{activeSortOption.shortLabel}</span>
+                      <ChevronDown className="w-3 h-3 text-orange-400/80 shrink-0" />
                     </button>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-0.5">
-                  {TREE_SORT_OPTIONS.map((opt) => {
-                    const isSelected = sortBy === opt.id;
-                    return (
+                    {onToggleSortDirection && (
                       <button
-                        key={opt.id}
+                        type="button"
+                        onClick={onToggleSortDirection}
+                        className="h-full px-1.5 sm:px-2 border-l border-orange-500/30 flex items-center justify-center text-orange-400 hover:bg-orange-500/25 hover:text-orange-300 transition-colors cursor-pointer"
+                        title={`Order: ${sortDirection === 'asc' ? 'Ascending' : 'Descending'} (Click to toggle)`}
+                      >
+                        {sortDirection === 'asc' ? (
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  /* Default Sort: Clean Neutral Button */
+                  <button
+                    type="button"
+                    onClick={handleToggleSortDropdown}
+                    className="h-8 flex items-center gap-1.5 px-2 sm:px-2.5 rounded-lg bg-[#18181b] border border-[#27272a] hover:bg-[#27272a] text-[#f4f4f5] text-xs font-semibold shadow-xs hover:border-orange-500/40 transition-all cursor-pointer shrink-0"
+                    title="Sort Tasks"
+                  >
+                    <ArrowUpDown className="w-3.5 h-3.5 text-[#a1a1aa] shrink-0" />
+                    <span className="font-semibold tracking-wide">Sort</span>
+                    <ChevronDown className="w-3 h-3 text-[#71717a] shrink-0" />
+                  </button>
+                )}
+
+                <PortalMenu
+                  isOpen={isSortFilterOpen}
+                  onClose={() => setSortAnchor(null)}
+                  anchorRect={sortAnchor?.rect || null}
+                  triggerElement={sortAnchor?.el || null}
+                  align="left"
+                  className="w-64 flex flex-col gap-1"
+                >
+                  <div className="px-2 py-1 flex items-center justify-between border-b border-[#27272a]">
+                    <span className="text-[11px] font-bold text-[#a1a1aa] uppercase tracking-wider">
+                      Sort Tasks
+                    </span>
+                    {isNonDefaultSort && (
+                      <button
                         type="button"
                         onClick={() => {
-                          onSortByChange(opt.id);
-                          setIsSortFilterOpen(false);
+                          onSortByChange('default');
+                          setSortAnchor(null);
                         }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer flex items-center justify-between ${
-                          isSelected
-                            ? 'bg-orange-500/15 text-orange-400 font-bold'
-                            : 'text-[#a1a1aa] hover:bg-[#27272a] hover:text-[#f4f4f5]'
-                        }`}
+                        className="text-[10px] text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1 cursor-pointer"
                       >
-                        <div className="flex items-center gap-2 min-w-0 pr-2">
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 ${
-                              isSelected
-                                ? 'bg-orange-500/25 text-orange-300'
-                                : 'bg-[#27272a] text-[#a1a1aa]'
-                            }`}
-                          >
-                            {opt.shortLabel}
-                          </span>
-                          <div className="min-w-0">
-                            <div className="font-medium truncate">{opt.label}</div>
-                            <div className="text-[10px] text-[#71717a] font-normal truncate">
-                              {opt.description}
+                        <RotateCcw className="w-3 h-3" />
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-0.5">
+                    {TREE_SORT_OPTIONS.map((opt) => {
+                      const isSelected = sortBy === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            onSortByChange(opt.id);
+                            setSortAnchor(null);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer flex items-center justify-between ${
+                            isSelected
+                              ? 'bg-orange-500/15 text-orange-400 font-bold'
+                              : 'text-[#a1a1aa] hover:bg-[#27272a] hover:text-[#f4f4f5]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 pr-2">
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 ${
+                                isSelected
+                                  ? 'bg-orange-500/25 text-orange-300'
+                                  : 'bg-[#27272a] text-[#a1a1aa]'
+                              }`}
+                            >
+                              {opt.shortLabel}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{opt.label}</div>
+                              <div className="text-[10px] text-[#71717a] font-normal truncate">
+                                {opt.description}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-orange-400 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Direction segmented control inside dropdown */}
-                {isNonDefaultSort && onToggleSortDirection && (
-                  <div className="pt-1.5 border-t border-[#27272a] mt-0.5">
-                    <div className="text-[10px] text-[#71717a] font-medium px-2 pb-1">
-                      Sort Direction:
-                    </div>
-                    <div className="grid grid-cols-2 gap-1 bg-[#121215] p-1 rounded-lg border border-[#27272a]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (sortDirection !== 'asc') onToggleSortDirection();
-                        }}
-                        className={`px-2 py-1 rounded text-[11px] font-medium flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                          sortDirection === 'asc'
-                            ? 'bg-orange-500 text-white shadow-xs font-bold'
-                            : 'text-[#a1a1aa] hover:text-white'
-                        }`}
-                      >
-                        <ArrowUp className="w-3 h-3" /> Ascending
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (sortDirection !== 'desc') onToggleSortDirection();
-                        }}
-                        className={`px-2 py-1 rounded text-[11px] font-medium flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                          sortDirection === 'desc'
-                            ? 'bg-orange-500 text-white shadow-xs font-bold'
-                            : 'text-[#a1a1aa] hover:text-white'
-                        }`}
-                      >
-                        <ArrowDown className="w-3 h-3" /> Descending
-                      </button>
-                    </div>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-orange-400 shrink-0" />}
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
+
+                  {/* Direction segmented control inside dropdown */}
+                  {isNonDefaultSort && onToggleSortDirection && (
+                    <div className="pt-1.5 border-t border-[#27272a] mt-0.5">
+                      <div className="text-[10px] text-[#71717a] font-medium px-2 pb-1">
+                        Sort Direction:
+                      </div>
+                      <div className="grid grid-cols-2 gap-1 bg-[#121215] p-1 rounded-lg border border-[#27272a]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (sortDirection !== 'asc') onToggleSortDirection();
+                          }}
+                          className={`px-2 py-1 rounded text-[11px] font-medium flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                            sortDirection === 'asc'
+                              ? 'bg-orange-500 text-white shadow-xs font-bold'
+                              : 'text-[#a1a1aa] hover:text-white'
+                          }`}
+                        >
+                          <ArrowUp className="w-3 h-3" /> Ascending
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (sortDirection !== 'desc') onToggleSortDirection();
+                          }}
+                          className={`px-2 py-1 rounded text-[11px] font-medium flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                            sortDirection === 'desc'
+                              ? 'bg-orange-500 text-white shadow-xs font-bold'
+                              : 'text-[#a1a1aa] hover:text-white'
+                          }`}
+                        >
+                          <ArrowDown className="w-3 h-3" /> Descending
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </PortalMenu>
               </div>
-              </>
+            )}
+
+            {/* QUICK RESET BUTTON */}
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetAllFilters}
+                className="h-8 px-2 rounded-lg text-xs font-medium text-[#71717a] hover:text-orange-400 hover:bg-[#27272a]/70 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                title="Reset all filters, search, and sorting"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span className="hidden xl:inline text-[11px]">Reset</span>
+              </button>
             )}
           </div>
-        )}
-
-        {/* Search Trigger Button (shown on < md when search is collapsed) */}
-        {!isMobileSearchOpen && (
-          <button
-            type="button"
-            onClick={() => setIsMobileSearchOpen(true)}
-            className="md:hidden h-8 w-8 rounded-xl bg-[#18181b] border border-[#27272a] hover:bg-[#27272a] hover:border-orange-500/40 flex items-center justify-center text-[#a1a1aa] hover:text-white transition-all cursor-pointer shrink-0"
-            title="Search items"
-          >
-            <Search className="w-3.5 h-3.5" />
-          </button>
-        )}
-
-        {/* Desktop Search Input (Always visible on md+ screens) */}
-        <div className="hidden md:flex relative items-center">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#71717a] pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="h-8 pl-8 pr-7 sm:pr-8 rounded-xl bg-[#18181b] border border-[#27272a] text-xs text-[#f4f4f5] placeholder-[#71717a] focus:outline-none focus:border-orange-500/50 w-28 sm:w-36 lg:w-44 transition-all"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => onSearchChange('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#71717a] hover:text-white cursor-pointer p-0.5 rounded-full hover:bg-[#27272a]"
-              title="Clear search"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
         </div>
       </div>
-
-      {/* RIGHT SECTION: Action Button (+ Project on mobile, + New Project on desktop) */}
-      <div className={`shrink-0 ${isMobileSearchOpen ? 'hidden md:block' : 'block'}`}>
-        <button
-          type="button"
-          onClick={() => onOpenProjectModal()}
-          className="h-8 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white text-xs font-bold px-3 sm:px-3.5 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/20 hover:shadow-orange-500/30 cursor-pointer shrink-0 whitespace-nowrap"
-          title="Create New Project"
-        >
-          <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
-          <span>
-            <span className="hidden sm:inline">New </span>
-            Project
-          </span>
-        </button>
-      </div>
     </div>
-  </div>
-</div>
-);
+  );
 };
 

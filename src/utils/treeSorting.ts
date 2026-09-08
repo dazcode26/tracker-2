@@ -75,7 +75,7 @@ export function getItemTotalSessionsCount(item: ItemNode): number {
 /**
  * Compare two sibling items based on selected criteria.
  */
-function compareItems(
+export function compareItems(
   a: ItemNode,
   b: ItemNode,
   sortBy: TreeSortBy,

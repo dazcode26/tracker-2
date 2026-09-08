@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Play, Square, MoreHorizontal, Clock, User, ArrowRight, Copy, Check, ChevronRight, ChevronDown, Target, Folder, Search, X, Plus } from 'lucide-react';
 import { StructureToolbar } from './StructureToolbar';
 import { PortalMenu } from './PortalMenu';
 import { AppData, ItemNode, ItemStatus, ProjectNode } from '../types';
 import { getLeafFlatItems, formatDuration, getItemLoggedSeconds, getStatusConfig } from '../utils/treeUtils';
+import { TreeSortBy, TreeSortDirection, compareItems } from '../utils/treeSorting';
 
 interface MenuAnchorState {
   id: string;
@@ -51,7 +52,6 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setActiveStatusAnchor(null);
-        setIsProjectFilterOpen(false);
       }
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -61,11 +61,41 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   // Search and Project Filter states fallback
   const [internalSearchQuery, setInternalSearchQuery] = useState<string>('');
   const [internalSelectedProjectId, setInternalSelectedProjectId] = useState<string>('all');
-  const [isProjectFilterOpen, setIsProjectFilterOpen] = useState<boolean>(false);
-  const projectFilterRef = useRef<HTMLDivElement>(null);
 
   const currentProjectId = selectedProjectId !== undefined ? selectedProjectId : internalSelectedProjectId;
   const currentSearchQuery = searchQuery !== undefined ? searchQuery : internalSearchQuery;
+
+  // Kanban Sorting State (Persisted in localStorage for convenience)
+  const [sortBy, setSortBy] = useState<TreeSortBy>(() => {
+    try {
+      return (localStorage.getItem('tracker_kanban_sort_by') as TreeSortBy) || 'default';
+    } catch {
+      return 'default';
+    }
+  });
+
+  const [sortDirection, setSortDirection] = useState<TreeSortDirection>(() => {
+    try {
+      return (localStorage.getItem('tracker_kanban_sort_direction') as TreeSortDirection) || 'asc';
+    } catch {
+      return 'asc';
+    }
+  });
+
+  const handleSortByChange = (newSort: TreeSortBy) => {
+    setSortBy(newSort);
+    try {
+      localStorage.setItem('tracker_kanban_sort_by', newSort);
+    } catch {}
+  };
+
+  const handleToggleSortDirection = () => {
+    const nextDir = sortDirection === 'asc' ? 'desc' : 'asc';
+    setSortDirection(nextDir);
+    try {
+      localStorage.setItem('tracker_kanban_sort_direction', nextDir);
+    } catch {}
+  };
 
   const handleFilterChange = (projId: string) => {
     if (onSelectProjectFilter) {
@@ -73,7 +103,6 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     } else {
       setInternalSelectedProjectId(projId);
     }
-    setIsProjectFilterOpen(false);
   };
 
   const handleSearchInputChange = (text: string) => {
@@ -83,20 +112,6 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
       setInternalSearchQuery(text);
     }
   };
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        projectFilterRef.current &&
-        !projectFilterRef.current.contains(event.target as Node)
-      ) {
-        setIsProjectFilterOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const activeProjects = appData.projects.filter((p) => p.status === 'active');
   const allFlatItems = getLeafFlatItems(activeProjects);
@@ -253,6 +268,10 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
         persons={appData.persons}
         selectedPersonId={selectedPersonId}
         onSelectPerson={onSelectPersonFilter}
+        sortBy={sortBy}
+        onSortByChange={handleSortByChange}
+        sortDirection={sortDirection}
+        onToggleSortDirection={handleToggleSortDirection}
         searchQuery={currentSearchQuery}
         onSearchChange={handleSearchInputChange}
         onOpenProjectModal={onOpenProjectModal}
@@ -261,11 +280,14 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
         {columns.map((col) => {
           const colItems = flatItems.filter((f) => f.item.status === col.status);
+          if (sortBy !== 'default') {
+            colItems.sort((a, b) => compareItems(a.item, b.item, sortBy, sortDirection));
+          }
 
           return (
             <div
               key={col.status}
-              className="bg-[#121215] border border-[#27272a] rounded-xl p-3 flex flex-col min-h-[500px]"
+              className="bg-[#121215] border border-[#27272a] rounded-lg p-3 flex flex-col min-h-[500px]"
             >
               {/* Column Header */}
               <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#27272a] px-1">
@@ -306,7 +328,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       key={item.id}
                       style={cardStyle}
                       onClick={() => onOpenEditItemModal(item)}
-                      className={`border rounded-xl p-3.5 space-y-2.5 shadow-md hover:brightness-110 transition-all cursor-pointer group ${
+                      className={`border rounded-lg p-3.5 space-y-2.5 shadow-md hover:brightness-110 transition-all cursor-pointer group ${
                         isRunning ? 'ring-2 ring-orange-500/50' : ''
                       }`}
                     >

@@ -127,7 +127,7 @@ export const PortalMenu: React.FC<PortalMenuProps> = ({
         right: coords?.right !== undefined ? `${coords.right}px` : undefined,
         visibility: coords ? 'visible' : 'hidden',
       }}
-      className={`bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-1.5 text-xs animate-in fade-in duration-100 ${className}`}
+      className={`bg-[#18181b] border border-[#27272a] rounded-lg shadow-2xl p-1.5 text-xs animate-in fade-in duration-100 ${className}`}
       onClick={(e) => e.stopPropagation()}
     >
       {children}
