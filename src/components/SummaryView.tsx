@@ -674,7 +674,7 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 max-w-[1400px] mx-auto pb-16">
+    <div className="w-full pb-16 space-y-4">
       {/* Time-Based Unified Toolbar */}
       <TimeBasedToolbar
         projects={appData.projects}
@@ -700,7 +700,8 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
         }}
       />
 
-      {/* Summary Stat Badges (Dynamic to selected period & filter) */}
+      <div className="max-w-[1400px] mx-auto space-y-4">
+        {/* Summary Stat Badges (Dynamic to selected period & filter) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-[#121215] border border-[#27272a] rounded-xl p-3.5 flex items-center justify-between shadow-md">
           <span className="text-xs text-[#a1a1aa]">Period Total Logged</span>
@@ -906,6 +907,7 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

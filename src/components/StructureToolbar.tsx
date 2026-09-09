@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { Person, ProjectNode } from '../types';
 import { TreeSortBy, TreeSortDirection, TREE_SORT_OPTIONS } from '../utils/treeSorting';
-import { useHeadroom } from '../hooks/useHeadroom';
 import { PortalMenu } from './PortalMenu';
 
 export interface StructureToolbarProps {
@@ -209,25 +208,10 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
     if (searchQuery) onSearchChange('');
   };
 
-  const isAnyMenuOpen = isProjectFilterOpen || isPersonFilterOpen || isSortFilterOpen;
-  const { isSticky, isVisible } = useHeadroom({ forceVisible: isAnyMenuOpen });
-
   return (
-    <div
-      className={`sticky top-0 z-30 transition-opacity duration-200 ease-out ${
-        isSticky
-          ? `py-2 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 bg-[#101010]/95 dark:bg-[#101010]/95 [data-theme=light]:bg-[#f8fafc]/95 backdrop-blur-md border-b border-[#27272a] [data-theme=light]:border-[#e2e8f0] shadow-lg shadow-black/25 ${
-              isVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-            }`
-          : 'opacity-100 py-0'
-      }`}
-    >
+    <div className="sticky top-0 z-30 py-2 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 bg-[#101010]/95 dark:bg-[#101010]/95 [data-theme=light]:bg-[#f8fafc]/95 backdrop-blur-md border-b border-[#27272a] [data-theme=light]:border-[#e2e8f0] shadow-lg shadow-black/25">
       <div className="max-w-[1400px] mx-auto w-full">
-        <div
-          className={`flex flex-wrap md:flex-nowrap items-center justify-between gap-y-2 gap-x-2 md:gap-3 ${
-            isSticky ? 'py-1 md:py-0 md:h-9' : 'pb-2 border-b border-[#27272a] [data-theme=light]:border-[#e2e8f0]'
-          } relative w-full`}
-        >
+        <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-y-2 gap-x-2 md:gap-3 py-1 md:py-0 md:h-9 relative w-full">
           {/* ACTIONS: ROW 1 ON MOBILE (order-1 w-full), RIGHT SIDE ON DESKTOP (order-2 md:w-auto md:ml-auto) */}
           <div className="order-1 w-full md:w-auto md:order-2 flex items-center gap-2 md:ml-auto shrink-0">
             {/* Search Input: Expands full remaining width on mobile, compact fixed width on desktop */}
@@ -235,7 +219,7 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#71717a] [data-theme=light]:text-slate-400 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search projects, tasks..."
+                placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
                 className="w-full md:w-36 lg:w-44 h-8 pl-8 pr-7 rounded-lg bg-[#18181b] [data-theme=light]:bg-white border border-[#27272a] [data-theme=light]:border-[#e2e8f0] text-xs text-[#f4f4f5] [data-theme=light]:text-[#0f172a] placeholder-[#71717a] [data-theme=light]:placeholder-slate-400 focus:outline-none focus:border-orange-500/50 shadow-xs transition-all"

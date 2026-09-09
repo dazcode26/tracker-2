@@ -938,7 +938,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-16 max-w-[1400px] mx-auto">
+    <div className="w-full pb-16">
       {/* Structural Toolbar */}
       <StructureToolbar
         projects={appData.projects}
@@ -956,7 +956,8 @@ export const TreeView: React.FC<TreeViewProps> = ({
         onOpenProjectModal={onOpenProjectModal}
       />
 
-      {activeProjects.length === 0 ? (
+      <div className="max-w-[1400px] mx-auto space-y-6 pt-4 md:pt-6">
+        {activeProjects.length === 0 ? (
         <div className="bg-[#121215] rounded-xl border border-[#27272a] p-12 text-center text-[#71717a] space-y-4 shadow-2xl">
           <Folder className="w-12 h-12 mx-auto text-[#3f3f46]" />
           <h3 className="text-base font-bold text-[#f4f4f5]">No Active Projects Yet</h3>
@@ -1322,6 +1323,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
           );
         })
       )}
+      </div>
     </div>
   );
 };

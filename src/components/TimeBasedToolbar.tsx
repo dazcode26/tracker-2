@@ -12,7 +12,6 @@ import {
   Check,
 } from 'lucide-react';
 import { Person, ProjectNode } from '../types';
-import { useHeadroom } from '../hooks/useHeadroom';
 import { PortalMenu } from './PortalMenu';
 
 export type TimeScaleOption = 'day' | 'week' | 'month' | 'year';
@@ -86,10 +85,6 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
   // Picker Month/Year calendar navigation state
   const [pickerDate, setPickerDate] = useState<Date>(new Date(currentDate));
   const searchInputRef = useRef<HTMLInputElement>(null);
-
-  // Headroom hook for sticky auto-hide with identical behavior to StructureToolbar
-  const isAnyMenuOpen = isProjectFilterOpen || isPersonFilterOpen || isDatePickerOpen || isTimeScaleOpen;
-  const { isSticky, isVisible } = useHeadroom({ forceVisible: isAnyMenuOpen });
 
   // Sync picker date when currentDate changes or picker opens
   useEffect(() => {
@@ -348,21 +343,11 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
   const hasActiveFilters = !isAllProjectsSelected || !isAllPersonsSelected;
 
   return (
-    <div
-      className={`sticky top-0 z-30 transition-opacity duration-200 ease-out ${
-        isSticky
-          ? `py-2 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 bg-[#101010]/95 dark:bg-[#101010]/95 [data-theme=light]:bg-[#f8fafc]/95 backdrop-blur-md border-b border-[#27272a] [data-theme=light]:border-[#e2e8f0] shadow-lg shadow-black/25 ${
-              isVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-            }`
-          : 'opacity-100 py-0'
-      }`}
-    >
-      <div className="max-w-[1400px] mx-auto w-full">
-        <div
-          className={`flex flex-wrap md:flex-nowrap items-center justify-between gap-y-2 gap-x-2 md:gap-3 ${
-            isSticky ? 'py-1 md:py-0 md:h-9' : 'pb-2 border-b border-[#27272a] [data-theme=light]:border-[#e2e8f0]'
-          } relative w-full`}
-        >
+    <>
+      {/* Sticky Unified Controls Bar (Consistent position & height, no animations) */}
+      <div className="sticky top-0 z-30 py-2 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 bg-[#101010]/95 dark:bg-[#101010]/95 [data-theme=light]:bg-[#f8fafc]/95 backdrop-blur-md border-b border-[#27272a] [data-theme=light]:border-[#e2e8f0] shadow-lg shadow-black/25">
+        <div className="max-w-[1400px] mx-auto w-full">
+          <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-y-2 gap-x-2 md:gap-3 py-1 md:py-0 md:h-9 relative w-full">
           {/* SEARCH & CONTROLS: ROW 1 ON MOBILE (order-1 w-full), RIGHT SIDE ON DESKTOP (order-2 md:w-auto md:ml-auto) */}
           <div className="order-1 w-full md:w-auto md:order-2 flex items-center gap-2 md:ml-auto shrink-0">
             {/* Search Input: Expands full remaining width on mobile, compact fixed width on desktop */}
@@ -757,9 +742,11 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
             )}
           </div>
         </div>
+      </div>
+    </div>
 
-        {/* Contextual Information H2 & Navigation on all viewports (Mobile & Desktop) */}
-        <div className="pt-2.5 pb-0.5 flex items-center justify-between gap-2">
+    {/* Contextual Information H2 & Navigation on all viewports (Mobile & Desktop) */}
+    <div className="max-w-[1400px] mx-auto w-full pt-1 pb-0.5 flex items-center justify-between gap-2">
           {/* Interactive Date Header with Date Picker Popover */}
           <div className="relative min-w-0">
             <button
@@ -879,7 +866,6 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
-  );
-};
+      </>
+    );
+  };

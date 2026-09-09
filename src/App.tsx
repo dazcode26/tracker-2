@@ -61,7 +61,7 @@ function WorkspaceApp() {
       const saved = localStorage.getItem('struktur_current_view');
       if (
         saved &&
-        ['dashboard', 'projects', 'tasks', 'timeline', 'calendar', 'analytics', 'team', 'archived'].includes(
+        ['dashboard', 'projects', 'tasks', 'timeline', 'gantt', 'calendar', 'analytics', 'team', 'archived'].includes(
           saved
         )
       ) {
@@ -917,7 +917,7 @@ function WorkspaceApp() {
 
       {/* Main Content Area - Offset by Sidebar Width on Desktop, and padded bottom for Mobile Bottom Bar */}
       <main
-        className="flex-1 min-w-0 ml-0 md:ml-16 min-h-screen w-full overflow-x-clip px-3 sm:px-6 lg:px-8 pt-4 pb-24 md:py-6"
+        className="flex-1 min-w-0 ml-0 md:ml-16 min-h-screen w-full overflow-x-clip px-3 sm:px-6 lg:px-8 pt-0 pb-24 md:pt-0 md:pb-6"
         style={{ overflowX: 'clip' }}
       >
         <div className="w-full">

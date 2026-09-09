@@ -278,7 +278,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 max-w-[1400px] mx-auto pb-16">
+    <div className="w-full pb-16">
       {/* Structural Toolbar */}
       <StructureToolbar
         projects={appData.projects}
@@ -296,7 +296,8 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
         onOpenProjectModal={onOpenProjectModal}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+      <div className="max-w-[1400px] mx-auto pt-4 md:pt-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
         {columns.map((col) => {
           const colItems = flatItems.filter((f) => f.item.status === col.status);
           if (sortBy !== 'default') {
@@ -512,6 +513,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );

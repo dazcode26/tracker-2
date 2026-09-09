@@ -325,17 +325,28 @@ export const GanttView: React.FC<GanttViewProps> = ({
   // Sync scrolling between left table and right canvas
   const leftTableRef = useRef<HTMLDivElement>(null);
   const rightCanvasRef = useRef<HTMLDivElement>(null);
+  const isSyncingScroll = useRef(false);
 
   const handleLeftScroll = () => {
+    if (isSyncingScroll.current) return;
+    isSyncingScroll.current = true;
     if (leftTableRef.current && rightCanvasRef.current) {
       rightCanvasRef.current.scrollTop = leftTableRef.current.scrollTop;
     }
+    requestAnimationFrame(() => {
+      isSyncingScroll.current = false;
+    });
   };
 
   const handleRightScroll = () => {
+    if (isSyncingScroll.current) return;
+    isSyncingScroll.current = true;
     if (leftTableRef.current && rightCanvasRef.current) {
       leftTableRef.current.scrollTop = rightCanvasRef.current.scrollTop;
     }
+    requestAnimationFrame(() => {
+      isSyncingScroll.current = false;
+    });
   };
 
   // Keyboard shortcuts (D: Day, W: Week, M: Month, Y: Year, T: Today)
@@ -727,7 +738,7 @@ export const GanttView: React.FC<GanttViewProps> = ({
   const activeTimerItemId = appData.settings?.activeTimer?.itemId;
 
   return (
-    <div className="space-y-3">
+    <div className="w-full pb-16 space-y-3">
       {/* Standardized Time-Based Toolbar */}
       <TimeBasedToolbar
         projects={appData.projects}
@@ -1041,8 +1052,7 @@ export const GanttView: React.FC<GanttViewProps> = ({
                             }}
                           />
                           <span
-                            className="absolute left-2 text-[10px] font-bold truncate pr-2"
-                            style={{ color: projColor }}
+                            className="absolute left-2 text-[10px] font-bold text-zinc-900 dark:text-white drop-shadow-xs truncate pr-2"
                           >
                             {row.title} ({row.progressPercent}%)
                           </span>
@@ -1066,7 +1076,9 @@ export const GanttView: React.FC<GanttViewProps> = ({
                           />
 
                           {/* Task Bar Label: High contrast in both light & dark mode */}
-                          <div className="absolute inset-0 px-2 flex items-center justify-between pointer-events-none text-[11px] font-semibold text-zinc-900 dark:text-white">
+                          <div className={`absolute inset-0 px-2 flex items-center justify-between pointer-events-none text-[11px] font-semibold ${
+                            row.progressPercent > 35 ? 'text-white drop-shadow-xs' : 'text-zinc-900 dark:text-white'
+                          }`}>
                             <span className="truncate pr-1 drop-shadow-xs">{row.title}</span>
                             <span className="text-[10px] font-mono shrink-0 drop-shadow-xs">
                               {row.progressPercent}%
