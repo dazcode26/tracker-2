@@ -762,6 +762,9 @@ export const GanttView: React.FC<GanttViewProps> = ({
         showCompleted={showCompleted}
         onToggleCompleted={() => setShowCompleted(!showCompleted)}
         hasActiveTimer={!!appData.settings.activeTimer}
+        appData={appData}
+        onStopTimer={onStopTimer}
+        onOpenEditItemModal={onOpenEditItemModal}
       />
 
       {/* GANTT DUAL-PANE CONTAINER */}
@@ -904,7 +907,7 @@ export const GanttView: React.FC<GanttViewProps> = ({
                         row.isProject
                           ? 'text-[#f4f4f5] text-xs font-bold'
                           : row.status === 'completed'
-                          ? 'line-through text-[#71717a]'
+                          ? 'text-[#71717a]'
                           : 'text-[#e4e4e7]'
                       }`}
                       title={row.title}

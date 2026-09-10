@@ -30,9 +30,26 @@ import {
 
 export type CalendarViewType = 'day' | 'week' | 'month' | 'year';
 
+// Contrast helper to ensure text on dynamic project color backgrounds is always WCAG legible
+const isLightColor = (hex?: string): boolean => {
+  if (!hex || !hex.startsWith('#')) return false;
+  const c = hex.replace('#', '');
+  if (c.length !== 6 && c.length !== 3) return false;
+  const full = c.length === 3 ? c.split('').map((x) => x + x).join('') : c;
+  const r = parseInt(full.substring(0, 2), 16);
+  const g = parseInt(full.substring(2, 4), 16);
+  const b = parseInt(full.substring(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return false;
+  // Threshold at 170: colors with YIQ < 170 (including orange, red, amber, green, blue) use crisp white text;
+  // only genuinely bright/pale/pastel colors use dark text.
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 170;
+};
+
 interface CalendarViewProps {
   appData: AppData;
   onOpenEditItemModal?: (item: ItemNode) => void;
+  onStopTimer?: () => void;
   onOpenAddItemModal?: (parentItemId?: string, projectId?: string, initialDate?: string) => void;
   selectedProjectId?: string;
   onSelectProjectFilter?: (projectId: string) => void;
@@ -168,9 +185,96 @@ function calculateNonOverlappingLayout(
   return result;
 }
 
+interface MonthDayCellTasksProps {
+  tasks: MonthDayTask[];
+  date: Date;
+  dateKey: string;
+  onOpenPopover: (dayData: { date: Date; dateKey: string; tasks: MonthDayTask[] }) => void;
+  renderTaskCard: (task: MonthDayTask, extraClass?: string) => React.ReactNode;
+}
+
+const MonthDayCellTasks: React.FC<MonthDayCellTasksProps> = ({
+  tasks,
+  date,
+  dateKey,
+  onOpenPopover,
+  renderTaskCard,
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [capacity, setCapacity] = useState<number>(2);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const measureCapacity = () => {
+      const height = el.clientHeight;
+      if (height <= 0) return;
+
+      const isMobile = window.innerWidth < 640;
+      const cardHeight = isMobile ? 20 : 23;
+      const gap = 4;
+      const moreBtnHeight = isMobile ? 18 : 20;
+
+      if (tasks.length <= 1) {
+        setCapacity(1);
+        return;
+      }
+
+      // Check if ALL tasks can fit comfortably without needing the "+X more" button
+      const allNeeded = tasks.length * cardHeight + (tasks.length - 1) * gap;
+      if (allNeeded <= height) {
+        setCapacity(tasks.length);
+        return;
+      }
+
+      // Otherwise, reserve space for "+X more" button and gap so it is NEVER cut off
+      const availableForCards = height - moreBtnHeight - gap;
+      const maxCards = Math.floor((availableForCards + gap) / (cardHeight + gap));
+      setCapacity(Math.max(1, maxCards));
+    };
+
+    measureCapacity();
+
+    const ro = new ResizeObserver(measureCapacity);
+    ro.observe(el);
+
+    return () => ro.disconnect();
+  }, [tasks.length]);
+
+  if (tasks.length === 0) {
+    return <div ref={containerRef} className="flex-1 min-h-0" />;
+  }
+
+  const canFitAll = tasks.length <= capacity;
+  const visibleTasks = canFitAll ? tasks : tasks.slice(0, Math.max(1, capacity));
+  const hiddenCount = tasks.length - visibleTasks.length;
+
+  return (
+    <div ref={containerRef} className="flex-1 flex flex-col gap-1 min-h-0 overflow-hidden">
+      {visibleTasks.map((task) => renderTaskCard(task))}
+
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenPopover({ date, dateKey, tasks });
+          }}
+          className="text-[10px] sm:text-[10.5px] font-medium text-orange-400 hover:text-orange-300 [data-theme=light]:text-orange-600 [data-theme=light]:hover:text-orange-700 text-left px-1.5 py-0.5 rounded hover:bg-orange-500/10 transition-colors cursor-pointer truncate shrink-0 select-none flex items-center gap-1"
+          title={`View all ${tasks.length} tasks for this date`}
+        >
+          +{hiddenCount} more
+        </button>
+      )}
+    </div>
+  );
+};
+
 export const CalendarView: React.FC<CalendarViewProps> = ({
   appData,
   onOpenEditItemModal,
+  onStopTimer,
   onOpenAddItemModal,
   selectedProjectId = 'all',
   onSelectProjectFilter,
@@ -804,6 +908,21 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     setCurrentDate(new Date());
   };
 
+  const lastWheelTimeRef = useRef<number>(0);
+
+  const handleCalendarWheel = (e: React.WheelEvent) => {
+    if (Math.abs(e.deltaY) < 25) return;
+    const now = Date.now();
+    if (now - lastWheelTimeRef.current < 280) return;
+    lastWheelTimeRef.current = now;
+
+    if (e.deltaY > 0) {
+      handleNext();
+    } else if (e.deltaY < 0) {
+      handlePrev();
+    }
+  };
+
   // Header Title formatted according to viewType (Matches GanttView format)
   const headerTitle = useMemo(() => {
     const year = currentDate.getFullYear();
@@ -935,8 +1054,55 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     const dayHeadersShort = showWeekends ? DAYS_OF_WEEK_SHORT : DAYS_OF_WEEK_SHORT.slice(0, 5);
     const dayHeadersMon = showWeekends ? DAYS_OF_WEEK_MON : DAYS_OF_WEEK_MON.slice(0, 5);
 
+    // Helper to render task card in Month View (border-free)
+    const renderMonthTaskCard = (task: MonthDayTask, extraClass = '') => {
+      const isCompleted = task.status === 'completed';
+      const statusConfig = getStatusConfig(task.status);
+
+      const fullTooltip = [
+        task.title,
+        `• ${task.project.title}`,
+        `• ${statusConfig.label}`,
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+      const isLightBg = isLightColor(task.color);
+
+      return (
+        <div
+          key={task.id}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onOpenEditItemModal) onOpenEditItemModal(task.item);
+          }}
+          style={{
+            backgroundColor: task.color,
+          }}
+          className={`px-1.5 py-0.5 sm:py-1 rounded text-[10.5px] sm:text-[11px] font-medium leading-tight truncate cursor-pointer hover:brightness-110 transition-all flex items-center justify-between gap-1 group/card select-none shrink-0 shadow-xs ${
+            isLightBg ? 'text-slate-950 font-semibold' : 'text-white'
+          } ${extraClass}`}
+          title={fullTooltip}
+        >
+          <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate">
+            {isCompleted ? (
+              <Check className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${isLightBg ? 'text-slate-950' : 'text-emerald-300'} shrink-0`} />
+            ) : (
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isLightBg ? 'bg-black/70' : 'bg-white/80'}`} />
+            )}
+            <span className="truncate">
+              {task.title}
+            </span>
+          </div>
+        </div>
+      );
+    };
+
     return (
-      <div className="flex flex-col flex-1 bg-[#121215] border border-[#27272a] rounded-none overflow-hidden shadow-xl min-h-0 md:h-full">
+      <div
+        onWheel={handleCalendarWheel}
+        className="flex flex-col flex-1 bg-[#121215] border border-[#27272a] rounded-xl overflow-hidden shadow-xl min-h-0 md:h-full"
+      >
         {/* Column Day Header (Monday to Sunday or Monday to Friday) */}
         <div className={`grid ${showWeekends ? 'grid-cols-7' : 'grid-cols-5'} border-b border-[#27272a] bg-[#18181b]/80 shrink-0`}>
           {dayHeadersShort.map((dayName, idx) => {
@@ -944,7 +1110,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             return (
               <div
                 key={dayName}
-                className={`py-2 text-center text-xs font-semibold uppercase tracking-wider border-r border-[#27272a] last:border-r-0 ${
+                className={`py-2 text-center text-[11px] font-medium tracking-wider uppercase border-r border-[#27272a] last:border-r-0 ${
                   isWeekend ? 'text-[#71717a] bg-[#141417]/50' : 'text-[#a1a1aa]'
                 }`}
               >
@@ -986,12 +1152,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     <div className="flex items-center justify-between mb-1 select-none shrink-0">
                       <div className="flex items-center gap-1">
                         {isToday ? (
-                          <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-orange-500 text-white font-bold text-xs flex items-center justify-center shadow-md">
+                          <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-orange-500 text-white font-medium text-xs flex items-center justify-center shadow-xs">
                             {date.getDate()}
                           </div>
                         ) : (
                           <span
-                            className={`text-xs font-medium ${
+                            className={`text-xs ${
+                              isFirstDayOfMonth ? 'font-medium' : 'font-normal'
+                            } ${
                               isCurrentMonth ? 'text-[#f4f4f5]' : 'text-[#71717a]'
                             }`}
                           >
@@ -1019,62 +1187,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       </button>
                     </div>
 
-                    {/* Task Events List inside Date Cell (Max 2 tasks, then +N more) */}
-                    <div className="flex-1 flex flex-col gap-1 min-h-0 overflow-hidden">
-                      {dayTasks.slice(0, 2).map((task) => {
-                        const isCompleted = task.status === 'completed';
-                        const statusConfig = getStatusConfig(task.status);
-
-                        const fullTooltip = [
-                          task.title,
-                          `• ${task.project.title}`,
-                          `• ${statusConfig.label}`,
-                        ]
-                          .filter(Boolean)
-                          .join(' ');
-
-                        return (
-                          <div
-                            key={task.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (onOpenEditItemModal) onOpenEditItemModal(task.item);
-                            }}
-                            style={{
-                              borderLeftColor: task.color,
-                              backgroundColor: `${task.color}15`,
-                            }}
-                            className="px-1.5 py-0.5 sm:py-1 rounded border-l-[3px] border border-[#27272a]/60 text-[10px] sm:text-[10.5px] font-medium text-[#f4f4f5] truncate cursor-pointer hover:brightness-125 hover:border-[#3f3f46] transition-all flex items-center justify-between gap-1 shadow-2xs group/card select-none shrink-0"
-                            title={fullTooltip}
-                          >
-                            <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate">
-                              {isCompleted ? (
-                                <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-[#10b981] shrink-0" />
-                              ) : (
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusConfig.dotBg}`} />
-                              )}
-                              <span className={`truncate ${isCompleted ? 'text-[#a1a1aa]' : 'text-[#f4f4f5]'}`}>
-                                {task.title}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                      {/* "+N more" button */}
-                      {dayTasks.length > 2 && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPopoverDay({ date, dateKey, tasks: dayTasks });
-                          }}
-                          className="text-[10px] font-semibold text-orange-400 hover:text-orange-300 text-left px-1.5 py-0.5 rounded hover:bg-orange-500/10 transition-colors cursor-pointer truncate shrink-0"
-                        >
-                          +{dayTasks.length - 2} more
-                        </button>
-                      )}
-                    </div>
+                    {/* Dynamic Task List inside Date Cell (automatically fits 1, 2, 3, 4+ tasks based on available height and ensures '+X more' is never cut off) */}
+                    <MonthDayCellTasks
+                      tasks={dayTasks}
+                      date={date}
+                      dateKey={dateKey}
+                      onOpenPopover={setPopoverDay}
+                      renderTaskCard={renderMonthTaskCard}
+                    />
                   </div>
                 );
               })}
@@ -1110,7 +1230,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     const hourHeight = 56; // px per hour
 
     return (
-      <div className="flex flex-col flex-1 bg-[#121215] border border-[#27272a] rounded-none overflow-hidden shadow-xl min-h-0 md:h-full">
+      <div className="flex flex-col flex-1 bg-[#121215] border border-[#27272a] rounded-xl overflow-hidden shadow-xl min-h-0 md:h-full">
         {/* Top Header: Date Columns + All-Day Task Row */}
         <div className="flex border-b border-[#27272a] bg-[#18181b]/95 z-20 shrink-0">
           {/* Time Gutter Header (Left) */}
@@ -1163,29 +1283,36 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     const statusConfig = getStatusConfig(ev.status);
                     const durationText = ev.durationSeconds > 0 ? formatDuration(ev.durationSeconds) : '';
 
+                    const isLightBg = isLightColor(ev.color);
+
                     return (
                       <div
                         key={ev.id}
                         onClick={() => onOpenEditItemModal && onOpenEditItemModal(ev.item)}
                         style={{
-                          borderLeftColor: ev.color,
-                          backgroundColor: `${ev.color}22`,
+                          backgroundColor: ev.color,
                         }}
-                        className="px-2 py-1 rounded border-l-[3px] border border-transparent text-[11px] font-medium text-[#f4f4f5] truncate cursor-pointer hover:brightness-125 transition-all flex items-center justify-between gap-1 shadow-xs"
+                        className={`px-2 py-1 rounded text-[11px] font-semibold truncate cursor-pointer hover:brightness-110 transition-all flex items-center justify-between gap-1 shadow-xs ${
+                          isLightBg ? 'text-slate-950' : 'text-white'
+                        }`}
                         title={`${ev.title} (${ev.project.title})${durationText ? ` • ${durationText}` : ''}${ev.sessionCount && ev.sessionCount > 1 ? ` • ${ev.sessionCount} sessions` : ''} • Status: ${statusConfig.label}`}
                       >
                         <div className="flex items-center gap-1 min-w-0 truncate">
-                          <span className={`truncate ${isCompleted ? 'text-[#71717a]' : 'text-[#f4f4f5]'}`}>{ev.title}</span>
+                          <span className="truncate">{ev.title}</span>
                           {ev.sessionCount && ev.sessionCount > 1 && (
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-[#27272a] text-orange-300 border border-orange-500/30 shrink-0 font-sans">
+                            <span className={`text-[9px] px-1 py-0.2 rounded font-sans shrink-0 ${
+                              isLightBg
+                                ? 'bg-black/15 text-slate-900 border border-black/20'
+                                : 'bg-white/20 text-white border border-white/30'
+                            }`}>
                               {ev.sessionCount} sess
                             </span>
                           )}
                         </div>
                         {isCompleted ? (
-                          <Check className="w-3 h-3 text-[#10b981] shrink-0" />
+                          <Check className={`w-3 h-3 ${isLightBg ? 'text-slate-950' : 'text-emerald-300'} shrink-0`} />
                         ) : (
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusConfig.dotBg}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isLightBg ? 'bg-black/70' : 'bg-white/80'}`} />
                         )}
                       </div>
                     );
@@ -1279,6 +1406,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     const timeWithDur = timeRangeStr
                       ? (durationText ? `${timeRangeStr} (${durationText})` : timeRangeStr)
                       : (durationText ? `(${durationText})` : '');
+                    const isLightBg = isLightColor(ev.color);
 
                     return (
                       <div
@@ -1290,37 +1418,39 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         style={{
                           top: `${topPx}px`,
                           height: `${heightPx}px`,
-                          borderLeftColor: ev.color,
+                          backgroundColor: ev.color,
                         }}
-                        className="absolute inset-x-1 border-l-[3.5px] border-t border-r border-b border-[#27272a] bg-[#18181b] rounded-lg p-1.5 text-xs text-[#f4f4f5] shadow-lg cursor-pointer hover:border-orange-500/50 hover:bg-[#202025] transition-all overflow-hidden z-10 flex flex-col justify-between group/card select-none"
+                        className={`absolute inset-x-1 rounded-lg p-1.5 text-xs shadow-lg cursor-pointer hover:brightness-110 transition-all overflow-hidden z-10 flex flex-col justify-between group/card select-none ${
+                          isLightBg ? 'text-slate-950' : 'text-white'
+                        }`}
                         title={`${ev.title}${timeWithDur ? ` | ${timeWithDur}` : ''} • ${ev.project.title} • Status: ${statusConfig.label}${ev.sessionCount && ev.sessionCount > 1 ? ` • ${ev.sessionCount} sessions consolidated` : ''}`}
                       >
-                        {/* Background subtle color wash */}
-                        <div
-                          className="absolute inset-0 pointer-events-none opacity-15 transition-opacity group-hover/card:opacity-25"
-                          style={{ backgroundColor: ev.color }}
-                        />
-
                         <div className="flex items-start justify-between gap-1 min-w-0 relative z-10">
-                          <span className={`font-semibold truncate text-[11px] leading-tight ${isCompleted ? 'text-[#71717a]' : 'text-[#f4f4f5]'}`}>
+                          <span className="font-semibold truncate text-[11px] leading-tight">
                             {ev.title}
                           </span>
                           {isCompleted ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-[#10b981] shrink-0" />
+                            <CheckCircle2 className={`w-3.5 h-3.5 ${isLightBg ? 'text-slate-950' : 'text-emerald-300'} shrink-0`} />
                           ) : (
                             <span
-                              className={`w-2 h-2 rounded-full shrink-0 mt-0.5 shadow-xs ${statusConfig.dotBg}`}
+                              className={`w-2 h-2 rounded-full shrink-0 mt-0.5 shadow-xs ${isLightBg ? 'bg-black/70' : 'bg-white/80'}`}
                               title={`Status: ${statusConfig.label}`}
                             />
                           )}
                         </div>
 
-                        <div className="flex items-center justify-between text-[10px] text-[#a1a1aa] font-mono mt-0.5 relative z-10 leading-none">
+                        <div className={`flex items-center justify-between text-[10px] font-mono mt-0.5 relative z-10 leading-none ${
+                          isLightBg ? 'text-slate-800' : 'text-white/80'
+                        }`}>
                           <span className="truncate">
                             {timeWithDur || formatDuration(ev.durationSeconds)}
                           </span>
                           {ev.isSession && (
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-orange-500/15 text-orange-400 font-sans shrink-0 ml-1">
+                            <span className={`text-[9px] px-1 py-0.2 rounded font-sans shrink-0 ml-1 ${
+                              isLightBg
+                                ? 'bg-black/15 text-slate-900 border border-black/20'
+                                : 'bg-white/20 text-white border border-white/30'
+                            }`}>
                               {ev.sessionCount && ev.sessionCount > 1 ? `${ev.sessionCount} sess` : 'Log'}
                             </span>
                           )}
@@ -1344,7 +1474,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     const months = Array.from({ length: 12 }, (_, i) => i);
 
     return (
-      <div className="flex flex-col flex-1 bg-[#121215] border border-[#27272a] rounded-none p-4 sm:p-6 shadow-xl overflow-y-auto min-h-0 md:h-full">
+      <div className="flex flex-col flex-1 bg-[#121215] border border-[#27272a] rounded-xl p-4 sm:p-6 shadow-xl overflow-y-auto min-h-0 md:h-full">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {months.map((mIdx) => {
             const firstDay = new Date(year, mIdx, 1);
@@ -1453,7 +1583,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   return (
-    <div className="w-full md:h-full md:flex md:flex-col md:min-h-0 space-y-2 pb-0">
+    <div className="w-full md:h-full md:flex md:flex-col md:min-h-0 space-y-2 pb-[10px]">
       {/* Time-Based Unified Toolbar */}
       <TimeBasedToolbar
         projects={appData.projects}
@@ -1473,6 +1603,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         timeScale={viewType}
         onTimeScaleChange={setViewType}
         hasActiveTimer={!!appData.settings.activeTimer}
+        appData={appData}
+        onStopTimer={onStopTimer}
+        onOpenEditItemModal={onOpenEditItemModal}
       />
 
       {/* Main Calendar View Area */}
@@ -1526,6 +1659,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   .filter(Boolean)
                   .join(' ');
 
+                const isLightBg = isLightColor(task.color);
+
                 return (
                   <div
                     key={task.id}
@@ -1534,43 +1669,48 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       if (onOpenEditItemModal) onOpenEditItemModal(task.item);
                     }}
                     style={{
-                      borderLeftColor: task.color,
-                      backgroundColor: `${task.color}15`,
+                      backgroundColor: task.color,
                     }}
-                    className="px-2.5 py-2 rounded-lg border-l-4 border border-[#27272a] text-xs font-medium text-[#f4f4f5] cursor-pointer hover:brightness-125 transition-all flex items-center justify-between gap-2"
+                    className={`px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer hover:brightness-110 transition-all flex items-center justify-between gap-2 shadow-xs ${
+                      isLightBg ? 'text-slate-950 font-semibold' : 'text-white'
+                    }`}
                     title={fullTooltip}
                   >
                     <div className="flex flex-col min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className={`font-semibold ${isCompleted ? 'text-[#71717a]' : 'text-[#f4f4f5]'}`}>
+                        <span className="font-semibold">
                           {task.title}
                         </span>
                         {timeDurationPart && (
                           <>
-                            <span className="text-[#52525b] font-mono text-[11px]">|</span>
-                            <span className="text-orange-400 font-mono text-[11px]">
+                            <span className={`font-mono text-[11px] ${isLightBg ? 'text-black/40' : 'text-white/40'}`}>|</span>
+                            <span className={`font-mono text-[11px] font-bold ${isLightBg ? 'text-slate-900' : 'text-white'}`}>
                               {timeDurationPart}
                             </span>
                           </>
                         )}
-                        <span className="text-[#52525b]">•</span>
-                        <span className="text-[#a1a1aa] text-[11px]">{task.project.title}</span>
-                        <span className="text-[#52525b]">•</span>
+                        <span className={`${isLightBg ? 'text-black/40' : 'text-white/40'}`}>•</span>
+                        <span className={`text-[11px] ${isLightBg ? 'text-slate-800' : 'text-white/80'}`}>{task.project.title}</span>
+                        <span className={`${isLightBg ? 'text-black/40' : 'text-white/40'}`}>•</span>
                         <span className="flex items-center gap-1">
-                          <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dotBg}`} />
-                          <span className={statusConfig.textColor}>{statusConfig.label}</span>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isLightBg ? 'bg-black/70' : 'bg-white/80'}`} />
+                          <span className={`${isLightBg ? 'text-slate-900' : 'text-white/90'}`}>{statusConfig.label}</span>
                         </span>
                         {task.sessionCount > 1 && (
-                          <span className="px-1 py-0.2 rounded bg-[#27272a] text-[9px] text-[#d4d4d8]">
+                          <span className={`px-1 py-0.2 rounded text-[9px] font-sans ${
+                            isLightBg
+                              ? 'bg-black/15 text-slate-950 border border-black/20'
+                              : 'bg-white/20 text-white border border-white/30'
+                          }`}>
                             {task.sessionCount} sessions
                           </span>
                         )}
                       </div>
                     </div>
                     {isCompleted ? (
-                      <Check className="w-3.5 h-3.5 text-[#10b981] shrink-0" />
+                      <Check className={`w-3.5 h-3.5 ${isLightBg ? 'text-slate-950' : 'text-emerald-300'} shrink-0`} />
                     ) : (
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${statusConfig.dotBg}`} />
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${isLightBg ? 'bg-black/70' : 'bg-white/80'}`} />
                     )}
                   </div>
                 );

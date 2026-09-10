@@ -7,6 +7,7 @@ interface ActiveTimerBannerProps {
   appData: AppData;
   onStopTimer: () => void;
   onOpenItemModal?: (item: ItemNode) => void;
+  hideOnLg?: boolean;
 }
 
 const formatTimerClock = (totalSec: number): string => {
@@ -23,6 +24,7 @@ export const ActiveTimerBanner: React.FC<ActiveTimerBannerProps> = ({
   appData,
   onStopTimer,
   onOpenItemModal,
+  hideOnLg = false,
 }) => {
   const activeTimer = appData.settings.activeTimer;
   const activeItemInfo = activeTimer ? findItemById(appData, activeTimer.itemId) : null;
@@ -52,26 +54,15 @@ export const ActiveTimerBanner: React.FC<ActiveTimerBannerProps> = ({
 
   return (
     <div
-      className="sticky top-0 w-full shrink-0 border-b transition-colors z-50 flex items-center justify-center px-4 h-9 select-none animate-in fade-in slide-in-from-top-2 duration-200"
+      className={`sticky top-0 w-full shrink-0 border-b transition-colors z-50 flex items-center justify-center px-4 h-9 select-none animate-in fade-in slide-in-from-top-2 duration-200 bg-[#161619] [data-theme=light]:bg-[#f1f5f9] ${
+        hideOnLg ? 'lg:hidden' : ''
+      }`}
       style={{
-        backgroundColor: 'var(--accent-subtle-bg, rgba(249, 115, 22, 0.12))',
         borderColor: 'var(--accent-subtle-border, rgba(249, 115, 22, 0.40))',
       }}
     >
-      {/* Centered Cluster: Pulsing Dot, Task Name, Clock, and Stop Icon Button */}
+      {/* Centered Cluster: Task Name, Clock, and Stop Icon Button */}
       <div className="flex items-center justify-center gap-2.5 sm:gap-3 max-w-full truncate px-2">
-        {/* Pulsing Live Dot with Dynamic Theme Accent */}
-        <span className="relative flex h-2.5 w-2.5 shrink-0">
-          <span
-            className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
-            style={{ backgroundColor: 'var(--accent-main, #f97316)' }}
-          />
-          <span
-            className="relative inline-flex rounded-full h-2.5 w-2.5"
-            style={{ backgroundColor: 'var(--accent-main, #f97316)' }}
-          />
-        </span>
-
         {/* Task Name (Project name removed) */}
         <button
           type="button"

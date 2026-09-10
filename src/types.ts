@@ -55,6 +55,7 @@ export interface ProjectNode {
   isExpanded?: boolean;
   actualStartDate?: string | null;
   actualEndDate?: string | null;
+  columnSettings?: Record<string, boolean>;
   items: ItemNode[];
 }
 

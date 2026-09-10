@@ -708,7 +708,14 @@ function WorkspaceApp() {
   };
 
   // Project Handlers
-  const handleSaveProject = (title: string, color: string, status: ProjectStatus = 'active', icon?: string, description?: string) => {
+  const handleSaveProject = (
+    title: string,
+    color: string,
+    status: ProjectStatus = 'active',
+    icon?: string,
+    description?: string,
+    columnSettings?: Record<string, boolean>
+  ) => {
     if (editingProject) {
       const updatedProjects = appData.projects.map((p) =>
         p.id === editingProject.id
@@ -719,6 +726,7 @@ function WorkspaceApp() {
               status,
               icon: icon !== undefined ? icon : p.icon,
               description: description !== undefined ? description : p.description,
+              columnSettings: columnSettings !== undefined ? columnSettings : p.columnSettings,
             }
           : p
       );
@@ -736,6 +744,16 @@ function WorkspaceApp() {
         color,
         icon: icon || '🌳',
         description: description || '',
+        columnSettings: columnSettings || {
+          name: true,
+          status: true,
+          progress: true,
+          date: true,
+          assignee: true,
+          reviewer: true,
+          timer: true,
+          actions: true,
+        },
         items: [],
       };
       persistData({
@@ -911,6 +929,7 @@ function WorkspaceApp() {
         appData={appData}
         onStopTimer={handleStopTimer}
         onOpenItemModal={(item) => openEditItemModal(item)}
+        hideOnLg={['projects', 'tasks', 'gantt', 'timeline', 'calendar', 'analytics'].includes(currentView)}
       />
 
       <div
@@ -1027,6 +1046,8 @@ function WorkspaceApp() {
               onOpenAddItemModal={() => openAddItemModal()}
               onOpenProjectModal={openProjectModal}
               onDuplicateItem={handleDuplicateItem}
+              onReorderItem={handleReorderItem}
+              onDeleteItem={handleDeleteItem}
               selectedProjectId={selectedProjectId}
               onSelectProjectFilter={handleSelectProjectFilter}
               selectedPersonId={selectedPersonId}
@@ -1044,6 +1065,7 @@ function WorkspaceApp() {
             <TimelineView
               appData={appData}
               onOpenEditItemModal={openEditItemModal}
+              onStopTimer={handleStopTimer}
               onOpenProjectModal={openProjectModal}
               onOpenAddItemModal={openAddItemModal}
               onToggleExpand={handleToggleItemExpand}
@@ -1069,6 +1091,7 @@ function WorkspaceApp() {
             <CalendarView
               appData={appData}
               onOpenEditItemModal={openEditItemModal}
+              onStopTimer={handleStopTimer}
               onOpenAddItemModal={openAddItemModal}
               selectedProjectId={selectedProjectId}
               onSelectProjectFilter={handleSelectProjectFilter}
@@ -1100,6 +1123,7 @@ function WorkspaceApp() {
             <SummaryView
               appData={appData}
               onOpenEditItemModal={openEditItemModal}
+              onStopTimer={handleStopTimer}
               selectedProjectId={selectedProjectId}
               onSelectProjectFilter={handleSelectProjectFilter}
               selectedPersonId={selectedPersonId}

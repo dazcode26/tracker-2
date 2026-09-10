@@ -12,9 +12,10 @@ import {
   Check,
   RotateCcw,
 } from 'lucide-react';
-import { Person, ProjectNode } from '../types';
+import { Person, ProjectNode, AppData, ItemNode } from '../types';
 import { TreeSortBy, TreeSortDirection, TREE_SORT_OPTIONS } from '../utils/treeSorting';
 import { PortalMenu } from './PortalMenu';
+import { ToolbarActiveTimer } from './ToolbarActiveTimer';
 
 export interface StructureToolbarProps {
   // Project Filter
@@ -40,8 +41,11 @@ export interface StructureToolbarProps {
   // Action Button
   onOpenProjectModal: () => void;
 
-  // Active Timer status for sticky positioning
+  // Active Timer status for sticky positioning & toolbar widget
   hasActiveTimer?: boolean;
+  appData?: AppData;
+  onStopTimer?: () => void;
+  onOpenEditItemModal?: (item: ItemNode) => void;
 }
 
 export const StructureToolbar: React.FC<StructureToolbarProps> = ({
@@ -59,6 +63,9 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
   onSearchChange,
   onOpenProjectModal,
   hasActiveTimer = false,
+  appData,
+  onStopTimer,
+  onOpenEditItemModal,
 }) => {
   const [projectAnchor, setProjectAnchor] = useState<{ rect: DOMRect; el: HTMLElement } | null>(null);
   const [personAnchor, setPersonAnchor] = useState<{ rect: DOMRect; el: HTMLElement } | null>(null);
@@ -215,13 +222,24 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
   return (
     <div
       className={`sticky ${
-        hasActiveTimer ? 'top-9' : 'top-0'
+        hasActiveTimer ? 'max-lg:top-9 top-0' : 'top-0'
       } z-30 py-2 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 bg-[#101010] [data-theme=light]:bg-[#f8fafc] transition-[top] duration-200`}
     >
       <div className="w-full">
         <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-y-2 gap-x-2 md:gap-3 py-1 md:py-0 md:h-9 relative w-full">
           {/* ACTIONS: ROW 1 ON MOBILE (order-1 w-full), RIGHT SIDE ON DESKTOP (order-2 md:w-auto md:ml-auto) */}
           <div className="order-1 w-full md:w-auto md:order-2 flex items-center gap-2 md:ml-auto shrink-0">
+            {/* Active Timer Widget: Displayed in toolbar on lg+ screens */}
+            {hasActiveTimer && appData && (
+              <div className="hidden lg:flex items-center shrink-0">
+                <ToolbarActiveTimer
+                  appData={appData}
+                  onStopTimer={onStopTimer}
+                  onOpenItemModal={onOpenEditItemModal}
+                />
+              </div>
+            )}
+
             {/* Search Input: Expands full remaining width on mobile, compact fixed width on desktop */}
             <div className="relative flex-1 md:flex-none min-w-0">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#71717a] [data-theme=light]:text-slate-400 pointer-events-none" />
@@ -230,7 +248,7 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="w-full md:w-36 lg:w-44 h-8 pl-8 pr-7 rounded-lg bg-[#18181b] [data-theme=light]:bg-white border border-[#27272a] [data-theme=light]:border-[#e2e8f0] text-xs text-[#f4f4f5] [data-theme=light]:text-[#0f172a] placeholder-[#71717a] [data-theme=light]:placeholder-slate-400 focus:outline-none focus:border-orange-500/50 shadow-xs transition-all"
+                className="w-full md:w-36 lg:w-44 h-8 pl-8 pr-7 rounded-lg bg-[#18181b] [data-theme=light]:bg-white border border-[#27272a] [data-theme=light]:border-[#e2e8f0] text-xs text-[#f4f4f5] [data-theme=light]:text-[#0f172a] placeholder-[#71717a] [data-theme=light]:placeholder-slate-400 focus:outline-none focus:border-orange-500/50 transition-all"
               />
               {searchQuery && (
                 <button
@@ -248,7 +266,10 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
             <button
               type="button"
               onClick={() => onOpenProjectModal()}
-              className="h-8 w-[108px] sm:w-32 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white text-xs font-bold px-2 sm:px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/20 hover:shadow-orange-500/30 cursor-pointer shrink-0 whitespace-nowrap"
+              className="h-8 text-white text-xs font-bold px-2.5 sm:px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap active:scale-95 hover:opacity-95"
+              style={{
+                backgroundColor: 'var(--accent-main, #f97316)',
+              }}
               title="Create New Project"
             >
               <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
@@ -268,10 +289,12 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
               <button
                 type="button"
                 onClick={handleToggleProjectDropdown}
-                className={`h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-lg border text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0 max-w-[160px] xs:max-w-[190px] sm:max-w-[210px] md:max-w-[220px] ${
-                  !isAllProjectsSelected
-                    ? 'bg-orange-500/15 border-orange-500/50 text-orange-400'
-                    : 'bg-[#18181b] [data-theme=light]:bg-white border-[#27272a] [data-theme=light]:border-[#e2e8f0] hover:bg-[#27272a] [data-theme=light]:hover:bg-slate-100 text-[#f4f4f5] [data-theme=light]:text-slate-800 hover:border-orange-500/40'
+                className={`h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 max-w-[160px] xs:max-w-[190px] sm:max-w-[210px] md:max-w-[220px] ${
+                  isProjectFilterOpen
+                    ? 'bg-white/10 [data-theme=light]:bg-slate-200/70 text-orange-400'
+                    : !isAllProjectsSelected
+                    ? 'bg-transparent text-orange-400 hover:bg-orange-500/10'
+                    : 'bg-transparent hover:bg-white/5 [data-theme=light]:hover:bg-slate-200/60 text-[#f4f4f5] [data-theme=light]:text-slate-800 hover:text-orange-400'
                 }`}
                 title="Filter by Project"
               >
@@ -302,9 +325,6 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                   <>
                     <Folder className="w-3.5 h-3.5 text-orange-400 shrink-0" />
                     <span className="truncate">{selectedProjectIds.length} Projects</span>
-                    <span className="px-1.5 py-0.2 bg-orange-500/20 text-orange-400 text-[10px] font-mono font-bold rounded-full shrink-0">
-                      {selectedProjectIds.length}
-                    </span>
                   </>
                 )}
                 <ChevronDown className="w-3 h-3 text-[#71717a] shrink-0 ml-auto" />
@@ -409,22 +429,26 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                 <button
                   type="button"
                   onClick={handleTogglePersonDropdown}
-                  className={`h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-lg border text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0 max-w-[140px] xs:max-w-[170px] sm:max-w-[190px] md:max-w-[200px] ${
-                    !isAllPersonsSelected
-                      ? 'bg-orange-500/15 border-orange-500/50 text-orange-400'
-                      : 'bg-[#18181b] [data-theme=light]:bg-white border-[#27272a] [data-theme=light]:border-[#e2e8f0] hover:bg-[#27272a] [data-theme=light]:hover:bg-slate-100 text-[#f4f4f5] [data-theme=light]:text-slate-800 hover:border-orange-500/40'
+                  className={`h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 max-w-[140px] xs:max-w-[170px] sm:max-w-[190px] md:max-w-[200px] ${
+                    isPersonFilterOpen
+                      ? 'bg-white/10 [data-theme=light]:bg-slate-200/70 text-orange-400'
+                      : !isAllPersonsSelected
+                      ? 'bg-transparent text-orange-400 hover:bg-orange-500/10'
+                      : 'bg-transparent hover:bg-white/5 [data-theme=light]:hover:bg-slate-200/60 text-[#f4f4f5] [data-theme=light]:text-slate-800 hover:text-orange-400'
                   }`}
                   title="Filter by Team Member (Assignee & Reviewer)"
                 >
                   {isAllPersonsSelected ? (
                     <>
                       <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                      <span className="truncate">All Team</span>
+                      <span className="truncate md:hidden">All</span>
+                      <span className="truncate hidden md:inline">All Team</span>
                     </>
                   ) : isNonePersons || selectedPersonIds.length === 0 ? (
                     <>
                       <Users className="w-3.5 h-3.5 text-[#71717a] shrink-0" />
-                      <span className="truncate text-[#a1a1aa]">0 Members</span>
+                      <span className="truncate md:hidden">0</span>
+                      <span className="truncate hidden md:inline text-[#a1a1aa]">0 Members</span>
                     </>
                   ) : selectedPersonIds.length === 1 ? (
                     <>
@@ -443,7 +467,8 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                                 {u?.name ? u.name.charAt(0).toUpperCase() : 'U'}
                               </span>
                             )}
-                            <span className="truncate">{u?.name || '1 Member'}</span>
+                            <span className="truncate md:hidden">{u?.name ? u.name.slice(0, 3) : 'Mem'}</span>
+                            <span className="truncate hidden md:inline">{u?.name || '1 Member'}</span>
                           </>
                         );
                       })()}
@@ -451,10 +476,8 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                   ) : (
                     <>
                       <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                      <span className="truncate">{selectedPersonIds.length} Members</span>
-                      <span className="px-1.5 py-0.2 bg-orange-500/20 text-orange-400 text-[10px] font-mono font-bold rounded-full shrink-0">
-                        {selectedPersonIds.length}
-                      </span>
+                      <span className="truncate md:hidden">{selectedPersonIds.length}</span>
+                      <span className="truncate hidden md:inline">{selectedPersonIds.length} Members</span>
                     </>
                   )}
                   <ChevronDown className="w-3 h-3 text-[#71717a] shrink-0 ml-auto" />
@@ -572,22 +595,28 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
               <div className="relative shrink-0">
                 {isNonDefaultSort ? (
                   /* Active Sort: Segmented Unified Control */
-                  <div className="inline-flex items-center h-8 rounded-lg border border-orange-500/50 bg-orange-500/15 overflow-hidden shadow-xs shrink-0">
+                  <div
+                    className={`inline-flex items-center h-8 rounded-lg transition-colors shrink-0 ${
+                      isSortFilterOpen
+                        ? 'bg-orange-500/20 text-orange-400'
+                        : 'bg-transparent text-orange-400 hover:bg-orange-500/10'
+                    }`}
+                  >
                     <button
                       type="button"
                       onClick={handleToggleSortDropdown}
-                      className="h-full flex items-center gap-1.5 px-2 sm:px-2.5 text-xs font-bold text-orange-400 hover:bg-orange-500/20 transition-colors cursor-pointer"
+                      className="h-full flex items-center gap-1.5 px-2 sm:px-2.5 text-xs font-bold transition-colors cursor-pointer hover:text-orange-300"
                       title="Change Sort Criteria"
                     >
-                      <ArrowUpDown className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                      <ArrowUpDown className="w-3.5 h-3.5 shrink-0" />
                       <span>{activeSortOption.shortLabel}</span>
-                      <ChevronDown className="w-3 h-3 text-orange-400/80 shrink-0" />
+                      <ChevronDown className="w-3 h-3 opacity-80 shrink-0" />
                     </button>
                     {onToggleSortDirection && (
                       <button
                         type="button"
                         onClick={onToggleSortDirection}
-                        className="h-full px-1.5 sm:px-2 border-l border-orange-500/30 flex items-center justify-center text-orange-400 hover:bg-orange-500/25 hover:text-orange-300 transition-colors cursor-pointer"
+                        className="h-full px-1.5 sm:px-2 flex items-center justify-center transition-colors cursor-pointer hover:bg-orange-500/20 rounded-r-lg"
                         title={`Order: ${sortDirection === 'asc' ? 'Ascending' : 'Descending'} (Click to toggle)`}
                       >
                         {sortDirection === 'asc' ? (
@@ -599,11 +628,15 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
                     )}
                   </div>
                 ) : (
-                  /* Default Sort: Clean Neutral Button */
+                  /* Default Sort: Clean Borderless Neutral Button */
                   <button
                     type="button"
                     onClick={handleToggleSortDropdown}
-                    className="h-8 flex items-center gap-1.5 px-2 sm:px-2.5 rounded-lg bg-[#18181b] [data-theme=light]:bg-white border border-[#27272a] [data-theme=light]:border-[#e2e8f0] hover:bg-[#27272a] [data-theme=light]:hover:bg-slate-100 text-[#f4f4f5] [data-theme=light]:text-slate-800 text-xs font-semibold shadow-xs hover:border-orange-500/40 transition-all cursor-pointer shrink-0"
+                    className={`h-8 flex items-center gap-1.5 px-2 sm:px-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
+                      isSortFilterOpen
+                        ? 'bg-white/10 [data-theme=light]:bg-slate-200/70 text-orange-400'
+                        : 'bg-transparent hover:bg-white/5 [data-theme=light]:hover:bg-slate-200/60 text-[#f4f4f5] [data-theme=light]:text-slate-800 hover:text-orange-400'
+                    }`}
                     title="Sort Tasks"
                   >
                     <ArrowUpDown className="w-3.5 h-3.5 text-[#a1a1aa] shrink-0" />

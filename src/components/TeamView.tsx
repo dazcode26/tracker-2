@@ -68,8 +68,8 @@ export const TeamView: React.FC<TeamViewProps> = ({
   };
 
   // Handle Add Member Submit
-  const handleAddSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddSubmit = (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
     if (!name.trim() || !email.trim()) return;
 
     const avatar = customAvatarUrl.trim() || selectedAvatar;
@@ -93,8 +93,8 @@ export const TeamView: React.FC<TeamViewProps> = ({
   };
 
   // Handle Edit Member Submit
-  const handleEditSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleEditSubmit = (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
     if (!editingPerson || !editName.trim() || !editEmail.trim()) return;
 
     const avatar = editCustomAvatar.trim() || editAvatar;

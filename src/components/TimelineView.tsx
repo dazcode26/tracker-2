@@ -178,6 +178,7 @@ export const consolidateDaySegments = (
 interface TimelineViewProps {
   appData: AppData;
   onOpenEditItemModal?: (item: any) => void;
+  onStopTimer?: () => void;
   onOpenProjectModal?: (project: ProjectNode) => void;
   onOpenAddItemModal?: (parentId?: string, projectId?: string) => void;
   onToggleExpand?: (itemId: string, projectId: string) => void;
@@ -201,6 +202,7 @@ interface TimelineViewProps {
 export const TimelineView: React.FC<TimelineViewProps> = ({
   appData,
   onOpenEditItemModal,
+  onStopTimer,
   onOpenProjectModal,
   onOpenAddItemModal,
   onToggleExpand,
@@ -1005,6 +1007,9 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
         timeScale={timeScale}
         onTimeScaleChange={setTimeScale}
         hasActiveTimer={!!appData.settings.activeTimer}
+        appData={appData}
+        onStopTimer={onStopTimer}
+        onOpenEditItemModal={onOpenEditItemModal}
       />
 
       {/* Secondary Controls Bar: Inactive Hours Toggle (Day view only) */}

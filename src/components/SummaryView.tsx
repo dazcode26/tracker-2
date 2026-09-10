@@ -22,6 +22,7 @@ import {
 interface SummaryViewProps {
   appData: AppData;
   onOpenEditItemModal?: (item: ItemNode) => void;
+  onStopTimer?: () => void;
   selectedProjectId?: string;
   onSelectProjectFilter?: (projectId: string) => void;
   selectedPersonId?: string;
@@ -67,6 +68,7 @@ const MONTH_NAMES = [
 export const SummaryView: React.FC<SummaryViewProps> = ({
   appData,
   onOpenEditItemModal,
+  onStopTimer,
   selectedProjectId = 'all',
   onSelectProjectFilter,
   selectedPersonId = 'all',
@@ -688,30 +690,39 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
           if (onTimeScaleChange) onTimeScaleChange(scale);
         }}
         hasActiveTimer={!!appData.settings.activeTimer}
+        appData={appData}
+        onStopTimer={onStopTimer}
+        onOpenEditItemModal={onOpenEditItemModal}
       />
 
       <div className="w-full space-y-4 pt-1">
-        {/* Summary Stat Badges (Dynamic to selected period & filter) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="bg-[#121215] border border-[#27272a] rounded-xl p-3.5 flex items-center justify-between shadow-md">
-          <span className="text-xs text-[#a1a1aa]">Period Total Logged</span>
-          <span className="text-sm font-bold font-mono text-orange-400">
-            {formatHoursDisplay(totalPeriodSeconds)}
-          </span>
+        {/* Summary Stat Badges (Flat, rounded-lg, clean metrics) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="bg-[#141417] border border-[#27272a] rounded-lg p-3 flex flex-col justify-between">
+            <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider">Total Logged</span>
+            <span className="text-sm font-bold font-mono text-orange-400 mt-1">
+              {formatHoursDisplay(totalPeriodSeconds)}
+            </span>
+          </div>
+          <div className="bg-[#141417] border border-[#27272a] rounded-lg p-3 flex flex-col justify-between">
+            <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider">Active Days</span>
+            <span className="text-sm font-bold font-mono text-[#f4f4f5] mt-1">
+              {dailyGroups.length} {dailyGroups.length === 1 ? 'day' : 'days'}
+            </span>
+          </div>
+          <div className="bg-[#141417] border border-[#27272a] rounded-lg p-3 flex flex-col justify-between">
+            <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider">Tasks Worked</span>
+            <span className="text-sm font-bold font-mono text-[#10b981] mt-1">
+              {totalPeriodTasksWorked} {totalPeriodTasksWorked === 1 ? 'task' : 'tasks'}
+            </span>
+          </div>
+          <div className="bg-[#141417] border border-[#27272a] rounded-lg p-3 flex flex-col justify-between">
+            <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider">Daily Average</span>
+            <span className="text-sm font-bold font-mono text-[#38bdf8] mt-1">
+              {dailyGroups.length > 0 ? formatHoursDisplay(Math.round(totalPeriodSeconds / dailyGroups.length)) : '0h 00m'}
+            </span>
+          </div>
         </div>
-        <div className="bg-[#121215] border border-[#27272a] rounded-xl p-3.5 flex items-center justify-between shadow-md">
-          <span className="text-xs text-[#a1a1aa]">Active Work Days</span>
-          <span className="text-sm font-bold font-mono text-[#f4f4f5]">
-            {dailyGroups.length} {dailyGroups.length === 1 ? 'day' : 'days'}
-          </span>
-        </div>
-        <div className="bg-[#121215] border border-[#27272a] rounded-xl p-3.5 flex items-center justify-between shadow-md">
-          <span className="text-xs text-[#a1a1aa]">Tasks Worked On</span>
-          <span className="text-sm font-bold font-mono text-[#10b981]">
-            {totalPeriodTasksWorked} {totalPeriodTasksWorked === 1 ? 'task' : 'tasks'}
-          </span>
-        </div>
-      </div>
 
       {/* Daily Grouped List */}
       {dailyGroups.length > 0 ? (

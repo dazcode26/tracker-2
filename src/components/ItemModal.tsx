@@ -409,7 +409,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
   };
 
   const handleSubmit = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
     setErrorMsg(null);
 
     const taskTitle = name.trim();

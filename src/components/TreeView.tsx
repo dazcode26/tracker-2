@@ -51,6 +51,28 @@ const NOTION_EMOJIS = [
   '🎨', '💻', '📊', '✅', '📦', '⭐', '🏷️', '📌',
 ];
 
+export const DEFAULT_TREE_COLUMNS: Record<string, boolean> = {
+  name: true,
+  status: true,
+  progress: true,
+  date: true,
+  assignee: true,
+  reviewer: true,
+  timer: true,
+  actions: true,
+};
+
+export const DEFAULT_TREE_WIDTHS: Record<string, number> = {
+  name: 300,
+  status: 140,
+  progress: 110,
+  date: 190,
+  assignee: 130,
+  reviewer: 130,
+  timer: 130,
+  actions: 55,
+};
+
 // Calculate item progress and roll-up for parent nodes
 function calculateItemProgress(item: ItemNode): { total: number; completed: number; percentage: number; isLeaf: boolean } {
   if (!item.subItems || item.subItems.length === 0) {
@@ -158,6 +180,67 @@ export const TreeView: React.FC<TreeViewProps> = ({
   const [activeProjectEmojiAnchor, setActiveProjectEmojiAnchor] = useState<MenuAnchorState | null>(null);
   const [activeProgressAnchor, setActiveProgressAnchor] = useState<MenuAnchorState | null>(null);
   const [activeAssigneeAnchor, setActiveAssigneeAnchor] = useState<MenuAnchorState | null>(null);
+  const [activeReviewerAnchor, setActiveReviewerAnchor] = useState<MenuAnchorState | null>(null);
+
+  // Column width resizing state persisted to localStorage
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem('tracker_tree_column_widths');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return { ...DEFAULT_TREE_WIDTHS, ...parsed };
+      }
+    } catch {}
+    return { ...DEFAULT_TREE_WIDTHS };
+  });
+
+  const resizingRef = useRef<{ colKey: string; startX: number; startWidth: number } | null>(null);
+
+  const handleStartResize = (arg1: string | React.MouseEvent, arg2?: string | React.MouseEvent) => {
+    const e = (typeof arg1 === 'object' && arg1 && 'clientX' in arg1 ? arg1 : arg2) as React.MouseEvent | undefined;
+    const colKey = (typeof arg1 === 'string' ? arg1 : arg2) as string;
+
+    if (!colKey) return;
+
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
+    const startX = e && typeof e.clientX === 'number' ? e.clientX : 0;
+    const startWidth = columnWidths[colKey] || DEFAULT_TREE_WIDTHS[colKey] || 100;
+    resizingRef.current = { colKey, startX, startWidth };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const current = resizingRef.current;
+      if (!current) return;
+      const { colKey: activeColKey, startX: activeStartX, startWidth: activeStartWidth } = current;
+      const delta = moveEvent.clientX - activeStartX;
+      const newWidth = Math.max(45, activeStartWidth + delta);
+      setColumnWidths((prev) => ({
+        ...prev,
+        [activeColKey]: newWidth,
+      }));
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      if (resizingRef.current) {
+        resizingRef.current = null;
+        setColumnWidths((latest) => {
+          try {
+            localStorage.setItem('tracker_tree_column_widths', JSON.stringify(latest));
+          } catch {}
+          return latest;
+        });
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
 
   const handleSetItemEmoji = (itemId: string, emoji: string) => {
     if (onSaveData) {
@@ -192,15 +275,26 @@ export const TreeView: React.FC<TreeViewProps> = ({
     setActiveProgressAnchor(null);
   };
 
-  const handleSetAssignee = (itemId: string, assigneeId: string) => {
+  const handleSetAssignee = (itemId: string, assigneeId: string | null) => {
     if (onSaveData) {
       const updatedProjects = updateItemInProjects(appData.projects, itemId, (item) => ({
         ...item,
-        assigneeId,
+        assigneeId: assigneeId || undefined,
       }));
       onSaveData({ ...appData, projects: updatedProjects });
     }
     setActiveAssigneeAnchor(null);
+  };
+
+  const handleSetReviewer = (itemId: string, reviewerId: string | null) => {
+    if (onSaveData) {
+      const updatedProjects = updateItemInProjects(appData.projects, itemId, (item) => ({
+        ...item,
+        reviewerId: reviewerId || undefined,
+      }));
+      onSaveData({ ...appData, projects: updatedProjects });
+    }
+    setActiveReviewerAnchor(null);
   };
 
   const [isProjectFilterOpen, setIsProjectFilterOpen] = useState<boolean>(false);
@@ -372,7 +466,8 @@ export const TreeView: React.FC<TreeViewProps> = ({
     depth: number,
     isFirstChild: boolean,
     isLastChild: boolean,
-    parentExpanded: boolean = true
+    parentExpanded: boolean = true,
+    colSettings: Record<string, boolean> = DEFAULT_TREE_COLUMNS
   ) => {
     if (!parentExpanded) return null;
     if (searchQuery && !matchesSearch(item)) return null;
@@ -406,10 +501,14 @@ export const TreeView: React.FC<TreeViewProps> = ({
             isTimerRunning ? 'bg-orange-500/10' : ''
           }`}
         >
-          {/* Column 1: NAME (Tree Indent + Connectors + Chevron/Bullet + Emoji + Title + Hover Actions) */}
+          {/* Column 1: NAME */}
           <div
-            className="flex-1 flex items-center min-w-[200px] xl:min-w-[260px] 2xl:min-w-[320px] py-2 pr-2 xl:pr-4 relative"
-            style={{ paddingLeft: `${Math.max(4, depth * 22 + 6)}px` }}
+            className="flex items-center py-2 pr-2 xl:pr-4 relative shrink-0 flex-1 min-w-[200px]"
+            style={{
+              width: `${columnWidths.name || DEFAULT_TREE_WIDTHS.name}px`,
+              minWidth: `${columnWidths.name || DEFAULT_TREE_WIDTHS.name}px`,
+              paddingLeft: `${Math.max(4, depth * 22 + 6)}px`,
+            }}
           >
             {/* Guide Lines for nested items */}
             {depth > 0 && (
@@ -490,7 +589,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
               <div className="flex items-center gap-1.5 min-w-0">
                 <span
                   className={`truncate group-hover/title:text-white transition-colors text-sm font-normal ${
-                    isCompleted ? 'line-through text-[#71717a]' : 'text-[#f4f4f5]'
+                    isCompleted ? 'text-[#71717a]' : 'text-[#f4f4f5]'
                   }`}
                 >
                   {item.name}
@@ -534,390 +633,523 @@ export const TreeView: React.FC<TreeViewProps> = ({
           </div>
 
           {/* Column 2: STATUS */}
-          <div className="w-28 xl:w-36 2xl:w-40 px-2 xl:px-3 shrink-0 relative" data-popover-root>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveStatusAnchor(
-                  activeStatusAnchor?.id === item.id
-                    ? null
-                    : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
-                );
+          {colSettings.status !== false && (
+            <div
+              style={{
+                width: `${columnWidths.status || DEFAULT_TREE_WIDTHS.status}px`,
+                minWidth: `${columnWidths.status || DEFAULT_TREE_WIDTHS.status}px`,
               }}
-              className="hover:opacity-80 transition-opacity cursor-pointer"
+              className="px-2 xl:px-3 shrink-0 relative"
+              data-popover-root
             >
-              {renderStatusBadge(item.status)}
-            </button>
-
-            <PortalMenu
-              isOpen={activeStatusAnchor?.id === item.id}
-              onClose={() => setActiveStatusAnchor(null)}
-              anchorRect={activeStatusAnchor?.id === item.id ? activeStatusAnchor.rect : null}
-              triggerElement={activeStatusAnchor?.id === item.id ? activeStatusAnchor.el : null}
-              align="left"
-              className="w-36 flex flex-col gap-0.5"
-            >
-              {(['not-started', 'in-progress', 'review', 'completed'] as ItemStatus[]).map((s) => {
-                const cfg = getStatusConfig(s);
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => {
-                      onUpdateItemStatus(item.id, s);
-                      setActiveStatusAnchor(null);
-                    }}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
-                      item.status === s ? 'font-semibold bg-[#27272a]' : ''
-                    }`}
-                  >
-                    <span className={`w-2 h-2 rounded-full ${cfg.dotBg}`} />
-                    <span className={item.status === s ? cfg.textColor : 'text-[#f4f4f5]'}>
-                      {cfg.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </PortalMenu>
-          </div>
-
-          {/* Column 3: PROGRESS (Interactive Roll-up & Quick Actions) */}
-          <div className="w-24 xl:w-[106px] 2xl:w-32 px-2 xl:px-3 shrink-0 relative" data-popover-root>
-            <button
-              type="button"
-              onClick={(e) => {
-                if (progress.isLeaf) {
-                  onUpdateItemStatus(item.id, isCompleted ? 'not-started' : 'completed');
-                } else {
+              <button
+                type="button"
+                onClick={(e) => {
                   e.stopPropagation();
-                  setActiveProgressAnchor(
-                    activeProgressAnchor?.id === item.id
+                  setActiveStatusAnchor(
+                    activeStatusAnchor?.id === item.id
                       ? null
                       : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
                   );
-                }
-              }}
-              className="w-full flex items-center gap-2 hover:bg-[#27272a]/60 p-1 rounded-md transition-colors cursor-pointer group/prog"
-              title={
-                progress.isLeaf
-                  ? `Click to toggle completion (${progress.percentage}%)`
-                  : `Click to view breakdown (${progress.completed}/${progress.total} sub-tasks completed)`
-              }
-            >
-              <div className="flex-1 bg-[#27272a] h-1.5 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    progress.percentage === 100
-                      ? 'bg-emerald-500'
-                      : progress.percentage > 0
-                      ? 'bg-orange-500'
-                      : 'bg-transparent'
-                  }`}
-                  style={{ width: `${progress.percentage}%` }}
-                />
-              </div>
-              <span className="text-[11px] font-mono text-[#a1a1aa] group-hover/prog:text-[#f4f4f5] font-medium shrink-0">
-                {progress.percentage}%
-              </span>
-            </button>
-
-            {!progress.isLeaf && (
-              <PortalMenu
-                isOpen={activeProgressAnchor?.id === item.id}
-                onClose={() => setActiveProgressAnchor(null)}
-                anchorRect={activeProgressAnchor?.id === item.id ? activeProgressAnchor.rect : null}
-                triggerElement={activeProgressAnchor?.id === item.id ? activeProgressAnchor.el : null}
-                align="left"
-                className="w-56 p-3 flex flex-col gap-2"
+                }}
+                className="hover:opacity-80 transition-opacity cursor-pointer"
               >
-                <div className="text-xs font-semibold text-[#f4f4f5] flex items-center justify-between">
-                  <span>Sub-items Rollup</span>
-                  <span className="font-mono text-emerald-400">{progress.percentage}%</span>
-                </div>
-                <p className="text-[11px] text-[#a1a1aa]">
-                  {progress.completed} of {progress.total} subordinate work items completed.
-                </p>
+                {renderStatusBadge(item.status)}
+              </button>
 
-                <div className="flex-1 bg-[#27272a] h-2 rounded-full overflow-hidden">
+              <PortalMenu
+                isOpen={activeStatusAnchor?.id === item.id}
+                onClose={() => setActiveStatusAnchor(null)}
+                anchorRect={activeStatusAnchor?.id === item.id ? activeStatusAnchor.rect : null}
+                triggerElement={activeStatusAnchor?.id === item.id ? activeStatusAnchor.el : null}
+                align="left"
+                className="w-36 flex flex-col gap-0.5"
+              >
+                {(['not-started', 'in-progress', 'review', 'completed'] as ItemStatus[]).map((s) => {
+                  const cfg = getStatusConfig(s);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        onUpdateItemStatus(item.id, s);
+                        setActiveStatusAnchor(null);
+                      }}
+                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
+                        item.status === s ? 'font-semibold bg-[#27272a]' : ''
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${cfg.dotBg}`} />
+                      <span className={item.status === s ? cfg.textColor : 'text-[#f4f4f5]'}>
+                        {cfg.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </PortalMenu>
+            </div>
+          )}
+
+          {/* Column 3: PROGRESS */}
+          {colSettings.progress !== false && (
+            <div
+              style={{
+                width: `${columnWidths.progress || DEFAULT_TREE_WIDTHS.progress}px`,
+                minWidth: `${columnWidths.progress || DEFAULT_TREE_WIDTHS.progress}px`,
+              }}
+              className="px-2 xl:px-3 shrink-0 relative"
+              data-popover-root
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  if (progress.isLeaf) {
+                    onUpdateItemStatus(item.id, isCompleted ? 'not-started' : 'completed');
+                  } else {
+                    e.stopPropagation();
+                    setActiveProgressAnchor(
+                      activeProgressAnchor?.id === item.id
+                        ? null
+                        : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                    );
+                  }
+                }}
+                className="w-full flex items-center gap-2 hover:bg-[#27272a]/60 p-1 rounded-md transition-colors cursor-pointer group/prog"
+                title={
+                  progress.isLeaf
+                    ? `Click to toggle completion (${progress.percentage}%)`
+                    : `Click to view breakdown (${progress.completed}/${progress.total} sub-tasks completed)`
+                }
+              >
+                <div className="flex-1 bg-[#27272a] h-1.5 rounded-full overflow-hidden">
                   <div
-                    className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      progress.percentage === 100
+                        ? 'bg-emerald-500'
+                        : progress.percentage > 0
+                        ? 'bg-orange-500'
+                        : 'bg-transparent'
+                    }`}
                     style={{ width: `${progress.percentage}%` }}
                   />
                 </div>
+                <span className="text-[11px] font-mono text-[#a1a1aa] group-hover/prog:text-[#f4f4f5] font-medium shrink-0">
+                  {progress.percentage}%
+                </span>
+              </button>
 
-                <div className="border-t border-[#27272a] pt-2 flex flex-col gap-1">
-                  <button
-                    type="button"
-                    onClick={() => handleBulkUpdateStatus(item.id, 'completed')}
-                    className="text-left px-2 py-1 text-xs text-emerald-400 hover:bg-emerald-500/15 rounded font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Mark all sub-tasks completed</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleBulkUpdateStatus(item.id, 'not-started')}
-                    className="text-left px-2 py-1 text-xs text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] rounded flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Circle className="w-3.5 h-3.5" />
-                    <span>Reset all to not started</span>
-                  </button>
-                </div>
-              </PortalMenu>
-            )}
-          </div>
+              {!progress.isLeaf && (
+                <PortalMenu
+                  isOpen={activeProgressAnchor?.id === item.id}
+                  onClose={() => setActiveProgressAnchor(null)}
+                  anchorRect={activeProgressAnchor?.id === item.id ? activeProgressAnchor.rect : null}
+                  triggerElement={activeProgressAnchor?.id === item.id ? activeProgressAnchor.el : null}
+                  align="left"
+                  className="w-56 p-3 flex flex-col gap-2"
+                >
+                  <div className="text-xs font-semibold text-[#f4f4f5] flex items-center justify-between">
+                    <span>Sub-items Rollup</span>
+                    <span className="font-mono text-emerald-400">{progress.percentage}%</span>
+                  </div>
+                  <p className="text-[11px] text-[#a1a1aa]">
+                    {progress.completed} of {progress.total} subordinate work items completed.
+                  </p>
+
+                  <div className="flex-1 bg-[#27272a] h-2 rounded-full overflow-hidden">
+                    <div
+                      className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${progress.percentage}%` }}
+                    />
+                  </div>
+
+                  <div className="border-t border-[#27272a] pt-2 flex flex-col gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleBulkUpdateStatus(item.id, 'completed')}
+                      className="text-left px-2 py-1 text-xs text-emerald-400 hover:bg-emerald-500/15 rounded font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Mark all sub-tasks completed</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleBulkUpdateStatus(item.id, 'not-started')}
+                      className="text-left px-2 py-1 text-xs text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] rounded flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Circle className="w-3.5 h-3.5" />
+                      <span>Reset all to not started</span>
+                    </button>
+                  </div>
+                </PortalMenu>
+              )}
+            </div>
+          )}
 
           {/* Column 4: DATE */}
-          <div
-            onClick={() => onOpenEditItemModal(item)}
-            className="w-[186px] min-w-[186px] xl:w-56 2xl:w-64 px-2 xl:px-4 shrink-0 font-mono text-[11px] cursor-pointer hover:bg-[#27272a]/50 rounded py-1 transition-colors flex flex-col justify-center min-w-0"
-            title={`Realization: ${dateRangeStr || 'None'}\nTarget: ${dateInfo.fullDate}\nClick to edit details`}
-          >
-            {dateRangeStr ? (
-              <span className="text-[#71717a] font-mono whitespace-nowrap truncate">{dateRangeStr}</span>
-            ) : (
-              <span className="text-[#71717a] italic text-[11px] font-mono">-</span>
-            )}
-            {!isCompleted && item.targetDate && (
-              <span
-                className={`truncate font-mono text-[10px] ${
-                  dateInfo.isOverdue
-                    ? 'text-red-400 font-semibold'
-                    : dateInfo.text === 'Today'
-                    ? 'text-amber-400 font-semibold'
-                    : 'text-[#71717a]'
-                }`}
-              >
-                {dateInfo.text}
-              </span>
-            )}
-          </div>
-
-          {/* Column 5: TEAM */}
-          <div className="w-16 xl:w-24 2xl:w-28 px-2 xl:px-3 shrink-0 flex items-center relative" data-popover-root>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveAssigneeAnchor(
-                  activeAssigneeAnchor?.id === item.id
-                    ? null
-                    : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
-                );
+          {colSettings.date !== false && (
+            <div
+              onClick={() => onOpenEditItemModal(item)}
+              style={{
+                width: `${columnWidths.date || DEFAULT_TREE_WIDTHS.date}px`,
+                minWidth: `${columnWidths.date || DEFAULT_TREE_WIDTHS.date}px`,
               }}
-              className="flex items-center -space-x-1.5 hover:opacity-85 p-0.5 rounded cursor-pointer transition-all"
-              title={
-                assignee
-                  ? `Assignee: ${assignee.name}${reviewer ? `\nReviewer: ${reviewer.name}` : ''}\nClick to change`
-                  : 'Unassigned (click to assign)'
-              }
+              className="px-2 xl:px-4 shrink-0 font-mono text-[11px] cursor-pointer hover:bg-[#27272a]/50 rounded py-1 transition-colors flex flex-col justify-center min-w-0"
+              title={`Realization: ${dateRangeStr || 'None'}\nTarget: ${dateInfo.fullDate}\nClick to edit details`}
             >
-              {assignee ? (
-                <img
-                  src={assignee.avatar}
-                  alt={assignee.name}
-                  className="w-6 h-6 rounded-full object-cover border border-[#27272a] ring-1 ring-white/10 shrink-0"
-                />
+              {dateRangeStr ? (
+                <span className="text-[#71717a] font-mono whitespace-nowrap truncate">{dateRangeStr}</span>
               ) : (
-                <div
-                  className="w-6 h-6 rounded-full bg-[#27272a] border border-[#3f3f46] flex items-center justify-center text-[#71717a] hover:text-[#f4f4f5] transition-colors shrink-0"
-                  title="Click to assign"
-                >
-                  <User className="w-3.5 h-3.5" />
-                </div>
+                <span className="text-[#71717a] italic text-[11px] font-mono">-</span>
               )}
-              {reviewer && (
-                <img
-                  src={reviewer.avatar}
-                  alt={`Reviewer: ${reviewer.name}`}
-                  className="w-5 h-5 rounded-full object-cover border border-amber-400 ring-1 ring-amber-400/50 shrink-0"
-                  title={`Reviewer: ${reviewer.name}`}
-                />
-              )}
-            </button>
-
-            <PortalMenu
-              isOpen={activeAssigneeAnchor?.id === item.id}
-              onClose={() => setActiveAssigneeAnchor(null)}
-              anchorRect={activeAssigneeAnchor?.id === item.id ? activeAssigneeAnchor.rect : null}
-              triggerElement={activeAssigneeAnchor?.id === item.id ? activeAssigneeAnchor.el : null}
-              align="left"
-              className="w-48 flex flex-col gap-0.5"
-            >
-              <div className="px-2 py-1 text-[10px] uppercase font-bold text-[#71717a]">
-                Assign Team Member
-              </div>
-              {(appData.persons || []).map((person) => (
-                <button
-                  key={person.id}
-                  type="button"
-                  onClick={() => {
-                    handleSetAssignee(item.id, person.id);
-                    setActiveAssigneeAnchor(null);
-                  }}
-                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
-                    item.assigneeId === person.id ? 'font-semibold bg-[#27272a]' : ''
+              {!isCompleted && item.targetDate && (
+                <span
+                  className={`truncate font-mono text-[10px] ${
+                    dateInfo.isOverdue
+                      ? 'text-red-400 font-semibold'
+                      : dateInfo.text === 'Today'
+                      ? 'text-amber-400 font-semibold'
+                      : 'text-[#71717a]'
                   }`}
                 >
-                  <img src={person.avatar} alt={person.name} className="w-5 h-5 rounded-full object-cover" />
-                  <div className="flex-1 truncate">
-                    <div className="truncate">{person.name}</div>
-                    <div className="text-[10px] text-[#71717a] truncate">{person.role}</div>
-                  </div>
-                </button>
-              ))}
-            </PortalMenu>
-          </div>
+                  {dateInfo.text}
+                </span>
+              )}
+            </div>
+          )}
 
-          {/* Column 6: TIMER */}
-          <div className="w-[130px] xl:w-36 2xl:w-40 px-2 xl:px-3 shrink-0 flex items-center justify-end gap-2 xl:gap-3">
-            <span
-              className={`font-mono text-[11px] whitespace-nowrap shrink-0 ${
-                isTimerRunning ? 'text-orange-400 font-bold animate-pulse' : 'text-[#71717a]'
-              }`}
-            >
-              {formattedTime}
-            </span>
-            {isTimerRunning ? (
-              <button
-                type="button"
-                onClick={onStopTimer}
-                className="w-6 h-6 rounded-full bg-orange-500 text-white hover:bg-orange-600 transition-colors flex items-center justify-center shadow-xs cursor-pointer shrink-0"
-                title="Stop timer"
-              >
-                <Square className="w-3 h-3 fill-current" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onStartTimer(item.id)}
-                className="w-6 h-6 rounded-full bg-[#27272a] text-[#a1a1aa] hover:text-orange-400 hover:bg-orange-500/20 transition-colors flex items-center justify-center cursor-pointer shrink-0"
-                title="Start timer for this task"
-              >
-                <Play className="w-3 h-3 fill-current ml-0.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Column 7: MORE */}
-          <div className="w-10 xl:w-14 2xl:w-16 px-1 xl:px-2 shrink-0 flex items-center justify-center relative" data-popover-root>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveMoreAnchor(
-                  activeMoreAnchor?.id === item.id
-                    ? null
-                    : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
-                );
+          {/* Column 5: ASSIGNEE */}
+          {colSettings.assignee !== false && (
+            <div
+              style={{
+                width: `${columnWidths.assignee || DEFAULT_TREE_WIDTHS.assignee}px`,
+                minWidth: `${columnWidths.assignee || DEFAULT_TREE_WIDTHS.assignee}px`,
               }}
-              className="w-7 h-7 rounded hover:bg-[#27272a] text-[#71717a] hover:text-[#f4f4f5] flex items-center justify-center cursor-pointer transition-colors"
-              title="Task options"
+              className="px-2 xl:px-3 shrink-0 flex items-center relative"
+              data-popover-root
             >
-              <MoreHorizontal className="w-4 h-4" />
-            </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveAssigneeAnchor(
+                    activeAssigneeAnchor?.id === item.id
+                      ? null
+                      : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                  );
+                }}
+                className="flex items-center gap-1.5 hover:opacity-85 p-0.5 rounded cursor-pointer transition-all max-w-full truncate"
+                title={assignee ? `Assignee: ${assignee.name} (Click to change)` : 'Unassigned (Click to assign)'}
+              >
+                {assignee ? (
+                  <>
+                    <img
+                      src={assignee.avatar}
+                      alt={assignee.name}
+                      className="w-5 h-5 rounded-full object-cover border border-[#27272a] ring-1 ring-white/10 shrink-0"
+                    />
+                    <span className="text-xs text-[#d4d4d8] truncate hidden sm:inline">{assignee.name}</span>
+                  </>
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-[#27272a] border border-[#3f3f46] flex items-center justify-center text-[#71717a] hover:text-[#f4f4f5] transition-colors shrink-0">
+                    <User className="w-3 h-3" />
+                  </div>
+                )}
+              </button>
 
-            {/* Context Menu Dropdown via Portal - Never clipped */}
-            <PortalMenu
-              isOpen={activeMoreAnchor?.id === item.id}
-              onClose={() => setActiveMoreAnchor(null)}
-              anchorRect={activeMoreAnchor?.id === item.id ? activeMoreAnchor.rect : null}
-              triggerElement={activeMoreAnchor?.id === item.id ? activeMoreAnchor.el : null}
-              align="right"
-              className="w-48 flex flex-col gap-0.5"
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  onOpenAddItemModal(item.id, projectId);
-                  setActiveMoreAnchor(null);
-                }}
-                className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#27272a] text-[#f4f4f5] flex items-center gap-2 cursor-pointer"
+              <PortalMenu
+                isOpen={activeAssigneeAnchor?.id === item.id}
+                onClose={() => setActiveAssigneeAnchor(null)}
+                anchorRect={activeAssigneeAnchor?.id === item.id ? activeAssigneeAnchor.rect : null}
+                triggerElement={activeAssigneeAnchor?.id === item.id ? activeAssigneeAnchor.el : null}
+                align="left"
+                className="w-48 flex flex-col gap-0.5"
               >
-                <Plus className="w-3.5 h-3.5 text-[#f4f4f5]" /> Add Sub-task
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onOpenEditItemModal(item);
-                  setActiveMoreAnchor(null);
-                }}
-                className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#27272a] text-[#f4f4f5] flex items-center gap-2 cursor-pointer"
-              >
-                <Edit2 className="w-3.5 h-3.5 text-[#a1a1aa]" /> Edit Details
-              </button>
-              {onDuplicateItem && (
+                <div className="px-2 py-1 text-[10px] uppercase font-bold text-[#71717a]">
+                  Assign Team Member
+                </div>
                 <button
                   type="button"
                   onClick={() => {
-                    onDuplicateItem(item.id);
+                    handleSetAssignee(item.id, null);
+                    setActiveAssigneeAnchor(null);
+                  }}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#71717a] hover:text-[#f4f4f5] cursor-pointer text-left transition-colors"
+                >
+                  <User className="w-4 h-4" />
+                  <span>Unassigned</span>
+                </button>
+                {(appData.persons || []).map((person) => (
+                  <button
+                    key={person.id}
+                    type="button"
+                    onClick={() => {
+                      handleSetAssignee(item.id, person.id);
+                      setActiveAssigneeAnchor(null);
+                    }}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
+                      item.assigneeId === person.id ? 'font-semibold bg-[#27272a]' : ''
+                    }`}
+                  >
+                    <img src={person.avatar} alt={person.name} className="w-5 h-5 rounded-full object-cover" />
+                    <div className="flex-1 truncate">
+                      <div className="truncate">{person.name}</div>
+                      <div className="text-[10px] text-[#71717a] truncate">{person.role}</div>
+                    </div>
+                  </button>
+                ))}
+              </PortalMenu>
+            </div>
+          )}
+
+          {/* Column 6: REVIEWER */}
+          {colSettings.reviewer !== false && (
+            <div
+              style={{
+                width: `${columnWidths.reviewer || DEFAULT_TREE_WIDTHS.reviewer}px`,
+                minWidth: `${columnWidths.reviewer || DEFAULT_TREE_WIDTHS.reviewer}px`,
+              }}
+              className="px-2 xl:px-3 shrink-0 flex items-center relative"
+              data-popover-root
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveReviewerAnchor(
+                    activeReviewerAnchor?.id === item.id
+                      ? null
+                      : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                  );
+                }}
+                className="flex items-center gap-1.5 hover:opacity-85 p-0.5 rounded cursor-pointer transition-all max-w-full truncate"
+                title={reviewer ? `Reviewer: ${reviewer.name} (Click to change)` : 'No Reviewer (Click to assign)'}
+              >
+                {reviewer ? (
+                  <>
+                    <img
+                      src={reviewer.avatar}
+                      alt={`Reviewer: ${reviewer.name}`}
+                      className="w-5 h-5 rounded-full object-cover border border-amber-400 ring-1 ring-amber-400/50 shrink-0"
+                    />
+                    <span className="text-xs text-amber-300 truncate hidden sm:inline">{reviewer.name}</span>
+                  </>
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-[#27272a] border border-[#3f3f46] flex items-center justify-center text-[#71717a] hover:text-[#f4f4f5] transition-colors shrink-0">
+                    <ShieldCheck className="w-3 h-3" />
+                  </div>
+                )}
+              </button>
+
+              <PortalMenu
+                isOpen={activeReviewerAnchor?.id === item.id}
+                onClose={() => setActiveReviewerAnchor(null)}
+                anchorRect={activeReviewerAnchor?.id === item.id ? activeReviewerAnchor.rect : null}
+                triggerElement={activeReviewerAnchor?.id === item.id ? activeReviewerAnchor.el : null}
+                align="left"
+                className="w-48 flex flex-col gap-0.5"
+              >
+                <div className="px-2 py-1 text-[10px] uppercase font-bold text-[#71717a]">
+                  Assign Reviewer
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSetReviewer(item.id, null);
+                    setActiveReviewerAnchor(null);
+                  }}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#71717a] hover:text-[#f4f4f5] cursor-pointer text-left transition-colors"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>None</span>
+                </button>
+                {(appData.persons || []).map((person) => (
+                  <button
+                    key={person.id}
+                    type="button"
+                    onClick={() => {
+                      handleSetReviewer(item.id, person.id);
+                      setActiveReviewerAnchor(null);
+                    }}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
+                      item.reviewerId === person.id ? 'font-semibold bg-[#27272a]' : ''
+                    }`}
+                  >
+                    <img src={person.avatar} alt={person.name} className="w-5 h-5 rounded-full object-cover" />
+                    <div className="flex-1 truncate">
+                      <div className="truncate">{person.name}</div>
+                      <div className="text-[10px] text-[#71717a] truncate">{person.role}</div>
+                    </div>
+                  </button>
+                ))}
+              </PortalMenu>
+            </div>
+          )}
+
+          {/* Column 7: TIMER */}
+          {colSettings.timer !== false && (
+            <div
+              style={{
+                width: `${columnWidths.timer || DEFAULT_TREE_WIDTHS.timer}px`,
+                minWidth: `${columnWidths.timer || DEFAULT_TREE_WIDTHS.timer}px`,
+              }}
+              className="px-2 xl:px-3 shrink-0 flex items-center justify-end gap-2 xl:gap-3"
+            >
+              <span
+                className={`font-mono text-[11px] whitespace-nowrap shrink-0 ${
+                  isTimerRunning ? 'text-orange-400 font-bold animate-pulse' : 'text-[#71717a]'
+                }`}
+              >
+                {formattedTime}
+              </span>
+              {isTimerRunning ? (
+                <button
+                  type="button"
+                  onClick={onStopTimer}
+                  className="w-6 h-6 rounded-full bg-orange-500 text-white hover:bg-orange-600 transition-colors flex items-center justify-center shadow-xs cursor-pointer shrink-0"
+                  title="Stop timer"
+                >
+                  <Square className="w-3 h-3 fill-current" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onStartTimer(item.id)}
+                  className="w-6 h-6 rounded-full bg-[#27272a] text-[#a1a1aa] hover:text-orange-400 hover:bg-orange-500/20 transition-colors flex items-center justify-center cursor-pointer shrink-0"
+                  title="Start timer for this task"
+                >
+                  <Play className="w-3 h-3 fill-current ml-0.5" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Column 8: MORE */}
+          {colSettings.actions !== false && (
+            <div
+              style={{
+                width: `${columnWidths.actions || DEFAULT_TREE_WIDTHS.actions}px`,
+                minWidth: `${columnWidths.actions || DEFAULT_TREE_WIDTHS.actions}px`,
+              }}
+              className="px-1 xl:px-2 shrink-0 flex items-center justify-center relative"
+              data-popover-root
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveMoreAnchor(
+                    activeMoreAnchor?.id === item.id
+                      ? null
+                      : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                  );
+                }}
+                className="w-7 h-7 rounded hover:bg-[#27272a] text-[#71717a] hover:text-[#f4f4f5] flex items-center justify-center cursor-pointer transition-colors"
+                title="Task options"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
+
+              {/* Context Menu Dropdown via Portal - Never clipped */}
+              <PortalMenu
+                isOpen={activeMoreAnchor?.id === item.id}
+                onClose={() => setActiveMoreAnchor(null)}
+                anchorRect={activeMoreAnchor?.id === item.id ? activeMoreAnchor.rect : null}
+                triggerElement={activeMoreAnchor?.id === item.id ? activeMoreAnchor.el : null}
+                align="right"
+                className="w-48 flex flex-col gap-0.5"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenAddItemModal(item.id, projectId);
                     setActiveMoreAnchor(null);
                   }}
                   className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#27272a] text-[#f4f4f5] flex items-center gap-2 cursor-pointer"
-                  title="Duplicate task"
                 >
-                  <Copy className="w-3.5 h-3.5 text-orange-400" /> Duplicate Task
+                  <Plus className="w-3.5 h-3.5 text-[#f4f4f5]" /> Add Sub-task
                 </button>
-              )}
-              {onReorderItem && (
-                sortBy !== 'default' ? (
-                  <div className="px-3 py-1.5 text-[10px] text-[#71717a] border-t border-[#27272a] my-0.5">
-                    <span className="italic">
-                      Manual reordering is disabled while sort is active ({TREE_SORT_OPTIONS.find((o) => o.id === sortBy)?.shortLabel}).
-                    </span>
-                  </div>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onReorderItem(item.id, 'up');
-                        setActiveMoreAnchor(null);
-                      }}
-                      disabled={isFirstChild}
-                      className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                        isFirstChild
-                          ? 'text-[#52525b] cursor-not-allowed opacity-50'
-                          : 'hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer'
-                      }`}
-                    >
-                      <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Move Up</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onReorderItem(item.id, 'down');
-                        setActiveMoreAnchor(null);
-                      }}
-                      disabled={isLastChild}
-                      className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                        isLastChild
-                          ? 'text-[#52525b] cursor-not-allowed opacity-50'
-                          : 'hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer'
-                      }`}
-                    >
-                      <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Move Down</span>
-                    </button>
-                  </>
-                )
-              )}
-              {onDeleteItem && (
                 <button
                   type="button"
                   onClick={() => {
-                    onDeleteItem(item.id);
+                    onOpenEditItemModal(item);
                     setActiveMoreAnchor(null);
                   }}
-                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#ef4444]/20 text-[#ef4444] flex items-center gap-2 border-t border-[#27272a] mt-1 pt-1.5 cursor-pointer"
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#27272a] text-[#f4f4f5] flex items-center gap-2 cursor-pointer"
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> Delete Item
+                  <Edit2 className="w-3.5 h-3.5 text-[#a1a1aa]" /> Edit Details
                 </button>
-              )}
-            </PortalMenu>
-          </div>
+                {onDuplicateItem && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDuplicateItem(item.id);
+                      setActiveMoreAnchor(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#27272a] text-[#f4f4f5] flex items-center gap-2 cursor-pointer"
+                    title="Duplicate task"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-orange-400" /> Duplicate Task
+                  </button>
+                )}
+                {onReorderItem && (
+                  sortBy !== 'default' ? (
+                    <div className="px-3 py-1.5 text-[10px] text-[#71717a] border-t border-[#27272a] my-0.5">
+                      <span className="italic">
+                        Manual reordering is disabled while sort is active ({TREE_SORT_OPTIONS.find((o) => o.id === sortBy)?.shortLabel}).
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onReorderItem(item.id, 'up');
+                          setActiveMoreAnchor(null);
+                        }}
+                        disabled={isFirstChild}
+                        className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                          isFirstChild
+                            ? 'text-[#52525b] cursor-not-allowed opacity-50'
+                            : 'hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer'
+                        }`}
+                      >
+                        <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Move Up</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onReorderItem(item.id, 'down');
+                          setActiveMoreAnchor(null);
+                        }}
+                        disabled={isLastChild}
+                        className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                          isLastChild
+                            ? 'text-[#52525b] cursor-not-allowed opacity-50'
+                            : 'hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer'
+                        }`}
+                      >
+                        <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Move Down</span>
+                      </button>
+                    </>
+                  )
+                )}
+                {onDeleteItem && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDeleteItem(item.id);
+                      setActiveMoreAnchor(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#ef4444]/20 text-[#ef4444] flex items-center gap-2 border-t border-[#27272a] mt-1 pt-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete Item
+                  </button>
+                )}
+              </PortalMenu>
+            </div>
+          )}
         </div>
 
         {/* Render Child SubItems recursively */}
@@ -930,7 +1162,8 @@ export const TreeView: React.FC<TreeViewProps> = ({
               depth + 1,
               idx === 0,
               idx === item.subItems.length - 1,
-              isExpanded
+              isExpanded,
+              colSettings
             )
           )}
       </React.Fragment>
@@ -955,6 +1188,9 @@ export const TreeView: React.FC<TreeViewProps> = ({
         onSearchChange={handleSearchInputChange}
         onOpenProjectModal={onOpenProjectModal}
         hasActiveTimer={!!appData.settings.activeTimer}
+        appData={appData}
+        onStopTimer={onStopTimer}
+        onOpenEditItemModal={onOpenEditItemModal}
       />
 
       <div className="w-full space-y-6 pt-4 md:pt-6">
@@ -1088,31 +1324,6 @@ export const TreeView: React.FC<TreeViewProps> = ({
                             <span>Add project description...</span>
                           </button>
                         )}
-                      </div>
-
-                      {/* Project Progress Bar & Completion Metrics */}
-                      <div className="mt-2.5 flex items-center gap-3">
-                        {/* Visual Progress Bar */}
-                        <div className="w-32 sm:w-44 bg-[#27272a] h-2 rounded-full overflow-hidden shrink-0">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              completionPct === 100
-                                ? 'bg-emerald-500'
-                                : completionPct > 0
-                                ? 'bg-orange-500'
-                                : 'bg-transparent'
-                            }`}
-                            style={{ width: `${completionPct}%` }}
-                          />
-                        </div>
-
-                        {/* Completed: X / Y */}
-                        <span className="text-xs text-[#a1a1aa] shrink-0 font-medium">
-                          Completed:{' '}
-                          <strong className="text-[#f4f4f5] font-mono">
-                            {completedTasks} / {totalTasks}
-                          </strong>
-                        </span>
                       </div>
                     </div>
                   </div>
@@ -1249,77 +1460,197 @@ export const TreeView: React.FC<TreeViewProps> = ({
               </div>
 
               {/* UNBOXED TASK LIST TABLE (Consistent with Notion View layout & mobile/tablet rules) */}
-              <div className="overflow-x-auto">
-                <div className="min-w-[850px] min-h-[140px] pb-4">
-                  {/* Table Column Headers */}
-                  <div className="flex items-center border-b border-[#27272a] text-[11px] font-semibold text-[#71717a] select-none py-2.5 px-1 tracking-wider uppercase">
-                    {/* 1. Name */}
-                    <div className="flex-1 min-w-[200px] xl:min-w-[260px] 2xl:min-w-[320px] flex items-center gap-1 pl-2 xl:pl-4">
-                      <span>Name</span>
-                    </div>
-                    {/* 2. Status */}
-                    <div className="w-28 xl:w-36 2xl:w-40 px-2 xl:px-3 shrink-0">
-                      <span>Status</span>
-                    </div>
-                    {/* 3. Progress */}
-                    <div className="w-24 xl:w-[106px] 2xl:w-32 px-2 xl:px-3 shrink-0">
-                      <span>Progress</span>
-                    </div>
-                    {/* 4. Date */}
-                    <div className="w-[186px] min-w-[186px] xl:w-56 2xl:w-64 px-2 xl:px-4 shrink-0">
-                      <span>Date</span>
-                    </div>
-                    {/* 5. Team */}
-                    <div className="w-16 xl:w-24 2xl:w-28 px-2 xl:px-3 shrink-0">
-                      <span>Team</span>
-                    </div>
-                    {/* 6. Timer */}
-                    <div className="w-[130px] xl:w-36 2xl:w-40 px-2 xl:px-3 shrink-0 text-right pr-2 xl:pr-3">
-                      <span>Timer</span>
-                    </div>
-                    {/* 7. More */}
-                    <div className="w-10 xl:w-14 2xl:w-16 px-1 xl:px-2 shrink-0 text-center">
-                      <span>More</span>
-                    </div>
-                  </div>
-
-                  {/* Tree Body */}
-                  <div className="flex flex-col divide-y-0">
-                    {projectItems.length > 0 ? (
-                      projectItems.map((item, idx) =>
-                        renderItemRow(
-                          item,
-                          project.id,
-                          0,
-                          idx === 0,
-                          idx === projectItems.length - 1
-                        )
-                      )
-                    ) : (
-                      <div className="py-8 text-center text-[#71717a] text-xs border-b border-[#27272a]">
-                        No tasks found in this project. Click{' '}
-                        <button
-                          type="button"
-                          onClick={() => onOpenAddItemModal(undefined, project.id)}
-                          className="font-semibold text-[#f4f4f5] hover:underline cursor-pointer"
+              {(() => {
+                const colSettings = project.columnSettings || DEFAULT_TREE_COLUMNS;
+                return (
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[850px] min-h-[140px] pb-4">
+                      {/* Table Column Headers */}
+                      <div className="flex items-center border-b border-[#27272a] text-[11px] font-semibold text-[#71717a] select-none py-2.5 px-1 tracking-wider uppercase">
+                        {/* 1. Name */}
+                        <div
+                          style={{
+                            width: `${columnWidths.name || DEFAULT_TREE_WIDTHS.name}px`,
+                            minWidth: `${columnWidths.name || DEFAULT_TREE_WIDTHS.name}px`,
+                          }}
+                          className="flex items-center justify-between pl-2 xl:pl-4 relative group shrink-0 flex-1 min-w-[200px]"
                         >
-                          + Add Task
-                        </button>{' '}
-                        below to start.
-                      </div>
-                    )}
-                  </div>
+                          <span>Name</span>
+                          <div
+                            onMouseDown={(e) => handleStartResize('name', e)}
+                            className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
+                            title="Drag to resize column"
+                          />
+                        </div>
 
-                  {/* Unboxed Add Task Quick Row (Like Notion View) */}
-                  <div
-                    onClick={() => onOpenAddItemModal(undefined, project.id)}
-                    className="flex items-center gap-2 py-2.5 px-2 text-xs font-medium text-[#71717a] hover:text-[#f4f4f5] hover:bg-[#18181b]/70 cursor-pointer transition-colors border-b border-dashed border-[#27272a] mt-1 select-none"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Task</span>
+                        {/* 2. Status */}
+                        {colSettings.status !== false && (
+                          <div
+                            style={{
+                              width: `${columnWidths.status || DEFAULT_TREE_WIDTHS.status}px`,
+                              minWidth: `${columnWidths.status || DEFAULT_TREE_WIDTHS.status}px`,
+                            }}
+                            className="px-2 xl:px-3 shrink-0 relative group flex items-center justify-between"
+                          >
+                            <span>Status</span>
+                            <div
+                              onMouseDown={(e) => handleStartResize('status', e)}
+                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
+                              title="Drag to resize column"
+                            />
+                          </div>
+                        )}
+
+                        {/* 3. Progress */}
+                        {colSettings.progress !== false && (
+                          <div
+                            style={{
+                              width: `${columnWidths.progress || DEFAULT_TREE_WIDTHS.progress}px`,
+                              minWidth: `${columnWidths.progress || DEFAULT_TREE_WIDTHS.progress}px`,
+                            }}
+                            className="px-2 xl:px-3 shrink-0 relative group flex items-center justify-between"
+                          >
+                            <span>Progress</span>
+                            <div
+                              onMouseDown={(e) => handleStartResize('progress', e)}
+                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
+                              title="Drag to resize column"
+                            />
+                          </div>
+                        )}
+
+                        {/* 4. Date */}
+                        {colSettings.date !== false && (
+                          <div
+                            style={{
+                              width: `${columnWidths.date || DEFAULT_TREE_WIDTHS.date}px`,
+                              minWidth: `${columnWidths.date || DEFAULT_TREE_WIDTHS.date}px`,
+                            }}
+                            className="px-2 xl:px-4 shrink-0 relative group flex items-center justify-between"
+                          >
+                            <span>Date</span>
+                            <div
+                              onMouseDown={(e) => handleStartResize('date', e)}
+                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
+                              title="Drag to resize column"
+                            />
+                          </div>
+                        )}
+
+                        {/* 5. Assignee */}
+                        {colSettings.assignee !== false && (
+                          <div
+                            style={{
+                              width: `${columnWidths.assignee || DEFAULT_TREE_WIDTHS.assignee}px`,
+                              minWidth: `${columnWidths.assignee || DEFAULT_TREE_WIDTHS.assignee}px`,
+                            }}
+                            className="px-2 xl:px-3 shrink-0 relative group flex items-center justify-between"
+                          >
+                            <span>Assignee</span>
+                            <div
+                              onMouseDown={(e) => handleStartResize('assignee', e)}
+                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
+                              title="Drag to resize column"
+                            />
+                          </div>
+                        )}
+
+                        {/* 6. Reviewer */}
+                        {colSettings.reviewer !== false && (
+                          <div
+                            style={{
+                              width: `${columnWidths.reviewer || DEFAULT_TREE_WIDTHS.reviewer}px`,
+                              minWidth: `${columnWidths.reviewer || DEFAULT_TREE_WIDTHS.reviewer}px`,
+                            }}
+                            className="px-2 xl:px-3 shrink-0 relative group flex items-center justify-between"
+                          >
+                            <span>Reviewer</span>
+                            <div
+                              onMouseDown={(e) => handleStartResize('reviewer', e)}
+                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
+                              title="Drag to resize column"
+                            />
+                          </div>
+                        )}
+
+                        {/* 7. Timer */}
+                        {colSettings.timer !== false && (
+                          <div
+                            style={{
+                              width: `${columnWidths.timer || DEFAULT_TREE_WIDTHS.timer}px`,
+                              minWidth: `${columnWidths.timer || DEFAULT_TREE_WIDTHS.timer}px`,
+                            }}
+                            className="px-2 xl:px-3 shrink-0 text-right pr-2 xl:pr-3 relative group flex items-center justify-end"
+                          >
+                            <span>Timer</span>
+                            <div
+                              onMouseDown={(e) => handleStartResize('timer', e)}
+                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
+                              title="Drag to resize column"
+                            />
+                          </div>
+                        )}
+
+                        {/* 8. More */}
+                        {colSettings.actions !== false && (
+                          <div
+                            style={{
+                              width: `${columnWidths.actions || DEFAULT_TREE_WIDTHS.actions}px`,
+                              minWidth: `${columnWidths.actions || DEFAULT_TREE_WIDTHS.actions}px`,
+                            }}
+                            className="px-1 xl:px-2 shrink-0 text-center relative group flex items-center justify-center"
+                          >
+                            <span>Actions</span>
+                            <div
+                              onMouseDown={(e) => handleStartResize('actions', e)}
+                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
+                              title="Drag to resize column"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Tree Body */}
+                      <div className="flex flex-col divide-y-0">
+                        {projectItems.length > 0 ? (
+                          projectItems.map((item, idx) =>
+                            renderItemRow(
+                              item,
+                              project.id,
+                              0,
+                              idx === 0,
+                              idx === projectItems.length - 1,
+                              true,
+                              colSettings
+                            )
+                          )
+                        ) : (
+                          <div className="py-8 text-center text-[#71717a] text-xs border-b border-[#27272a]">
+                            No tasks found in this project. Click{' '}
+                            <button
+                              type="button"
+                              onClick={() => onOpenAddItemModal(undefined, project.id)}
+                              className="font-semibold text-[#f4f4f5] hover:underline cursor-pointer"
+                            >
+                              + Add Task
+                            </button>{' '}
+                            below to start.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Unboxed Add Task Quick Row (Like Notion View) */}
+                      <div
+                        onClick={() => onOpenAddItemModal(undefined, project.id)}
+                        className="flex items-center gap-2 py-2.5 px-2 text-xs font-medium text-[#71717a] hover:text-[#f4f4f5] hover:bg-[#18181b]/70 cursor-pointer transition-colors border-b border-dashed border-[#27272a] mt-1 select-none"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Task</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                );
+              })()}
             </div>
           );
         })

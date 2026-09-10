@@ -11,8 +11,9 @@ import {
   Users,
   Check,
 } from 'lucide-react';
-import { Person, ProjectNode } from '../types';
+import { Person, ProjectNode, AppData, ItemNode } from '../types';
 import { PortalMenu } from './PortalMenu';
+import { ToolbarActiveTimer } from './ToolbarActiveTimer';
 
 export type TimeScaleOption = 'day' | 'week' | 'month' | 'year';
 
@@ -46,8 +47,11 @@ export interface TimeBasedToolbarProps {
   onTimeScaleChange: (scale: TimeScaleOption) => void;
   allowedTimeScales?: TimeScaleOption[];
 
-  // Active Timer status for sticky positioning
+  // Active Timer status for sticky positioning & toolbar widget
   hasActiveTimer?: boolean;
+  appData?: AppData;
+  onStopTimer?: () => void;
+  onOpenEditItemModal?: (item: ItemNode) => void;
 }
 
 const MONTH_NAMES = [
@@ -74,6 +78,9 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
   onTimeScaleChange,
   allowedTimeScales = ['day', 'week', 'month', 'year'],
   hasActiveTimer = false,
+  appData,
+  onStopTimer,
+  onOpenEditItemModal,
 }) => {
   // Portal Menu Anchors
   const [projectAnchor, setProjectAnchor] = useState<{ rect: DOMRect; el: HTMLElement } | null>(null);
@@ -351,13 +358,24 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
       {/* Sticky Unified Controls Bar (Consistent position & height, matching menu & main container background) */}
       <div
         className={`sticky ${
-          hasActiveTimer ? 'top-9' : 'top-0'
+          hasActiveTimer ? 'max-lg:top-9 top-0' : 'top-0'
         } z-30 py-2 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 bg-[#101010] [data-theme=light]:bg-[#f8fafc] shrink-0 transition-[top] duration-200`}
       >
         <div className="w-full">
           <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-y-2 gap-x-2 md:gap-3 py-1 md:py-0 md:h-9 relative w-full">
           {/* SEARCH & CONTROLS: ROW 1 ON MOBILE (order-1 w-full), RIGHT SIDE ON DESKTOP (order-2 md:w-auto md:ml-auto) */}
           <div className="order-1 w-full md:w-auto md:order-2 flex items-center gap-2 md:ml-auto shrink-0">
+            {/* Active Timer Widget: Displayed in toolbar on lg+ screens */}
+            {hasActiveTimer && appData && (
+              <div className="hidden lg:flex items-center shrink-0">
+                <ToolbarActiveTimer
+                  appData={appData}
+                  onStopTimer={onStopTimer}
+                  onOpenItemModal={onOpenEditItemModal}
+                />
+              </div>
+            )}
+
             {/* Search Input: Expands full remaining width on mobile, compact fixed width on desktop */}
             <div className="relative flex-1 md:flex-none min-w-0">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#71717a] [data-theme=light]:text-slate-400 pointer-events-none" />
@@ -367,7 +385,7 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="w-full md:w-36 lg:w-44 h-8 pl-8 pr-7 rounded-lg bg-[#18181b] [data-theme=light]:bg-white border border-[#27272a] [data-theme=light]:border-[#e2e8f0] text-xs text-[#f4f4f5] [data-theme=light]:text-[#0f172a] placeholder-[#71717a] [data-theme=light]:placeholder-slate-400 focus:outline-none focus:border-orange-500/50 shadow-xs transition-all"
+                className="w-full md:w-36 lg:w-44 h-8 pl-8 pr-7 rounded-lg bg-[#18181b] [data-theme=light]:bg-white border border-[#27272a] [data-theme=light]:border-[#e2e8f0] text-xs text-[#f4f4f5] [data-theme=light]:text-[#0f172a] placeholder-[#71717a] [data-theme=light]:placeholder-slate-400 focus:outline-none focus:border-orange-500/50 transition-all"
               />
               {searchQuery && (
                 <button
@@ -381,12 +399,12 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
               )}
             </div>
 
-            {/* TimeScale Switcher Button: Sized and aligned identically to StructureToolbar's action button */}
+            {/* TimeScale Switcher Button: Sized according to content (Day, Week, Month, Year) */}
             <div className="relative shrink-0">
               <button
                 type="button"
                 onClick={handleToggleTimeScale}
-                className={`h-8 w-[108px] sm:w-32 flex items-center justify-center gap-1.5 px-2 sm:px-3 rounded-lg border text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                className={`h-8 flex items-center justify-center gap-1.5 px-2.5 sm:px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
                   isTimeScaleOpen
                     ? 'border-orange-500 bg-orange-500/20 text-orange-400'
                     : 'border-orange-500/40 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400'
@@ -439,10 +457,12 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
               <button
                 type="button"
                 onClick={handleToggleProjectDropdown}
-                className={`h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-lg border text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0 max-w-[150px] xs:max-w-[180px] sm:max-w-[200px] md:max-w-[210px] ${
-                  !isAllProjectsSelected
-                    ? 'bg-orange-500/15 border-orange-500/50 text-orange-400'
-                    : 'bg-[#18181b] [data-theme=light]:bg-white border-[#27272a] [data-theme=light]:border-[#e2e8f0] hover:bg-[#27272a] [data-theme=light]:hover:bg-slate-100 text-[#f4f4f5] [data-theme=light]:text-slate-800 hover:border-orange-500/40'
+                className={`h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 max-w-[150px] xs:max-w-[180px] sm:max-w-[200px] md:max-w-[210px] ${
+                  isProjectFilterOpen
+                    ? 'bg-white/10 [data-theme=light]:bg-slate-200/70 text-orange-400'
+                    : !isAllProjectsSelected
+                    ? 'bg-transparent text-orange-400 hover:bg-orange-500/10'
+                    : 'bg-transparent hover:bg-white/5 [data-theme=light]:hover:bg-slate-200/60 text-[#f4f4f5] [data-theme=light]:text-slate-800 hover:text-orange-400'
                 }`}
                 title="Filter by Project"
               >
@@ -473,9 +493,6 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
                   <>
                     <Folder className="w-3.5 h-3.5 text-orange-400 shrink-0" />
                     <span className="truncate">{selectedProjectIds.length} Projects</span>
-                    <span className="px-1.5 py-0.2 bg-orange-500/20 text-orange-400 text-[10px] font-mono font-bold rounded-full shrink-0">
-                      {selectedProjectIds.length}
-                    </span>
                   </>
                 )}
                 <ChevronDown className="w-3 h-3 text-[#71717a] shrink-0 ml-auto" />
@@ -580,22 +597,26 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
                 <button
                   type="button"
                   onClick={handleTogglePersonDropdown}
-                  className={`h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-lg border text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0 max-w-[130px] xs:max-w-[160px] sm:max-w-[180px] md:max-w-[190px] ${
-                    !isAllPersonsSelected
-                      ? 'bg-orange-500/15 border-orange-500/50 text-orange-400'
-                      : 'bg-[#18181b] [data-theme=light]:bg-white border-[#27272a] [data-theme=light]:border-[#e2e8f0] hover:bg-[#27272a] [data-theme=light]:hover:bg-slate-100 text-[#f4f4f5] [data-theme=light]:text-slate-800 hover:border-orange-500/40'
+                  className={`h-8 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 max-w-[130px] xs:max-w-[160px] sm:max-w-[180px] md:max-w-[190px] ${
+                    isPersonFilterOpen
+                      ? 'bg-white/10 [data-theme=light]:bg-slate-200/70 text-orange-400'
+                      : !isAllPersonsSelected
+                      ? 'bg-transparent text-orange-400 hover:bg-orange-500/10'
+                      : 'bg-transparent hover:bg-white/5 [data-theme=light]:hover:bg-slate-200/60 text-[#f4f4f5] [data-theme=light]:text-slate-800 hover:text-orange-400'
                   }`}
                   title="Filter by Team Member"
                 >
                   {isAllPersonsSelected ? (
                     <>
                       <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                      <span className="truncate">All Team</span>
+                      <span className="truncate md:hidden">All</span>
+                      <span className="truncate hidden md:inline">All Team</span>
                     </>
                   ) : isNonePersons || selectedPersonIds.length === 0 ? (
                     <>
                       <Users className="w-3.5 h-3.5 text-[#71717a] shrink-0" />
-                      <span className="truncate text-[#a1a1aa]">0 Members</span>
+                      <span className="truncate md:hidden">0</span>
+                      <span className="truncate hidden md:inline text-[#a1a1aa]">0 Members</span>
                     </>
                   ) : selectedPersonIds.length === 1 ? (
                     <>
@@ -614,7 +635,8 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
                                 {u?.name?.charAt(0).toUpperCase() || 'U'}
                               </span>
                             )}
-                            <span className="truncate">{u?.name || '1 Member'}</span>
+                            <span className="truncate md:hidden">{u?.name ? u.name.slice(0, 3) : 'Mem'}</span>
+                            <span className="truncate hidden md:inline">{u?.name || '1 Member'}</span>
                           </>
                         );
                       })()}
@@ -622,10 +644,8 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
                   ) : (
                     <>
                       <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                      <span className="truncate">{selectedPersonIds.length} Members</span>
-                      <span className="px-1.5 py-0.2 bg-indigo-500/20 text-indigo-400 text-[10px] font-mono font-bold rounded-full shrink-0">
-                        {selectedPersonIds.length}
-                      </span>
+                      <span className="truncate md:hidden">{selectedPersonIds.length}</span>
+                      <span className="truncate hidden md:inline">{selectedPersonIds.length} Members</span>
                     </>
                   )}
                   <ChevronDown className="w-3 h-3 text-[#71717a] shrink-0 ml-auto" />
@@ -748,14 +768,72 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
                 Reset
               </button>
             )}
+
+            {/* Date Navigation & Datepicker (on md and lg screens, beside team filter: Today, prev, next, Datepicker) */}
+            <div className="hidden md:flex items-center gap-1.5 shrink-0">
+              {/* 1. Tombol Today (warna teks & bg seperti tombol reset, tambah 3px padding horizontal) */}
+              <button
+                type="button"
+                onClick={onToday}
+                className="h-8 px-[19px] flex items-center justify-center rounded-full bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 hover:text-orange-300 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                title="Jump to Today"
+              >
+                Today
+              </button>
+
+              {/* Prev & Next tanpa jarak (gap-0) */}
+              <div className="flex items-center shrink-0">
+                {/* 2. Tombol Prev (ukuran naik 2 point) */}
+                <button
+                  type="button"
+                  onClick={onPrev}
+                  className="p-1.5 flex items-center justify-center rounded-full text-[#a1a1aa] [data-theme=light]:text-slate-500 hover:text-white [data-theme=light]:hover:text-slate-900 hover:bg-white/5 [data-theme=light]:hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+                  title="Previous"
+                >
+                  <ChevronLeft className="w-[18px] h-[18px]" />
+                </button>
+
+                {/* 3. Tombol Next (ukuran naik 2 point) */}
+                <button
+                  type="button"
+                  onClick={onNext}
+                  className="p-1.5 flex items-center justify-center rounded-full text-[#a1a1aa] [data-theme=light]:text-slate-500 hover:text-white [data-theme=light]:hover:text-slate-900 hover:bg-white/5 [data-theme=light]:hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+                  title="Next"
+                >
+                  <ChevronRight className="w-[18px] h-[18px]" />
+                </button>
+              </div>
+
+              {/* 4. Datepicker Trigger (ukuran naik 2 point) */}
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={handleToggleDatePicker}
+                  className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-bold transition-all cursor-pointer select-none shrink-0 ${
+                    isDatePickerOpen
+                      ? 'text-orange-400'
+                      : 'text-[#f4f4f5] [data-theme=light]:text-slate-800 hover:text-orange-400 [data-theme=light]:hover:text-orange-500 hover:bg-white/5 [data-theme=light]:hover:bg-slate-100'
+                  }`}
+                  title="Click to open Date Picker & jump to any date"
+                >
+                  <CalendarIcon className="w-[18px] h-[18px] text-orange-400 shrink-0" />
+                  <span className="truncate max-w-[150px] lg:max-w-[210px]">{headerTitle}</span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-[#71717a] group-hover:text-orange-400 transition-transform duration-200 shrink-0 ${
+                      isDatePickerOpen ? 'rotate-180 text-orange-400' : ''
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    {/* Contextual Information H2 & Navigation on all viewports (Mobile & Desktop) */}
-    <div className="w-full pt-1 pb-0.5 flex items-center justify-between gap-2 shrink-0">
-          {/* Interactive Date Header with Date Picker Popover */}
+    {/* Contextual Information H2 & Navigation on Mobile Only (< md) */}
+    <div className="md:hidden w-full pt-1 pb-0.5 flex items-center justify-between gap-2 shrink-0">
+          {/* Interactive Date Header with Date Picker Popover (ukuran naik 2 point) */}
           <div className="relative min-w-0">
             <button
               type="button"
@@ -763,11 +841,11 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
               className="group flex items-center gap-1.5 text-left rounded-lg p-1 -m-1 hover:bg-[#18181b] [data-theme=light]:hover:bg-slate-100 transition-colors cursor-pointer select-none"
               title="Click to open Date Picker & jump to any date"
             >
-              <h2 className="text-sm sm:text-base md:text-lg font-bold text-[#f4f4f5] [data-theme=light]:text-slate-900 tracking-tight flex items-center gap-1.5 sm:gap-2 min-w-0 truncate">
-                <CalendarIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-orange-400 shrink-0" />
+              <h2 className="text-base sm:text-lg md:text-xl font-bold text-[#f4f4f5] [data-theme=light]:text-slate-900 tracking-tight flex items-center gap-1.5 sm:gap-2 min-w-0 truncate">
+                <CalendarIcon className="w-5 h-5 sm:w-5.5 sm:h-5.5 text-orange-400 shrink-0" />
                 <span className="truncate">{headerTitle}</span>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 text-[#71717a] group-hover:text-orange-400 transition-transform duration-200 shrink-0 ${
+                  className={`w-4 h-4 text-[#71717a] group-hover:text-orange-400 transition-transform duration-200 shrink-0 ${
                     isDatePickerOpen ? 'rotate-180 text-orange-400' : ''
                   }`}
                 />
@@ -846,32 +924,35 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
             </PortalMenu>
           </div>
 
-          {/* Date Navigation (Prev, Today, Next) positioned at the right corner of H2 */}
-          <div className="h-8 flex items-center bg-[#18181b] [data-theme=light]:bg-white border border-[#27272a] [data-theme=light]:border-[#e2e8f0] rounded-lg p-0.5 shrink-0 shadow-xs">
-            <button
-              type="button"
-              onClick={onPrev}
-              className="h-7 w-7 flex items-center justify-center rounded hover:bg-[#27272a] [data-theme=light]:hover:bg-slate-100 text-[#a1a1aa] [data-theme=light]:text-slate-600 hover:text-white [data-theme=light]:hover:text-slate-900 transition-colors cursor-pointer"
-              title="Previous"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
+          {/* Date Navigation (Today, Prev, Next) positioned at the right corner of H2 */}
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={onToday}
-              className="h-7 px-2.5 flex items-center justify-center rounded hover:bg-[#27272a] [data-theme=light]:hover:bg-slate-100 text-xs font-semibold text-[#f4f4f5] [data-theme=light]:text-slate-800 hover:text-orange-400 transition-colors cursor-pointer"
+              className="h-7 px-[17px] flex items-center justify-center rounded-full bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 hover:text-orange-300 text-xs font-semibold transition-colors cursor-pointer shrink-0"
               title="Jump to Today"
             >
               Today
             </button>
-            <button
-              type="button"
-              onClick={onNext}
-              className="h-7 w-7 flex items-center justify-center rounded hover:bg-[#27272a] [data-theme=light]:hover:bg-slate-100 text-[#a1a1aa] [data-theme=light]:text-slate-600 hover:text-white [data-theme=light]:hover:text-slate-900 transition-colors cursor-pointer"
-              title="Next"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+            {/* Prev & Next tanpa jarak (gap-0) */}
+            <div className="flex items-center shrink-0">
+              <button
+                type="button"
+                onClick={onPrev}
+                className="p-1.5 flex items-center justify-center rounded-full text-[#a1a1aa] [data-theme=light]:text-slate-500 hover:text-white [data-theme=light]:hover:text-slate-900 transition-colors cursor-pointer"
+                title="Previous"
+              >
+                <ChevronLeft className="w-[18px] h-[18px]" />
+              </button>
+              <button
+                type="button"
+                onClick={onNext}
+                className="p-1.5 flex items-center justify-center rounded-full text-[#a1a1aa] [data-theme=light]:text-slate-500 hover:text-white [data-theme=light]:hover:text-slate-900 transition-colors cursor-pointer"
+                title="Next"
+              >
+                <ChevronRight className="w-[18px] h-[18px]" />
+              </button>
+            </div>
           </div>
         </div>
       </>
