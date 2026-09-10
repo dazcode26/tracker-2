@@ -962,45 +962,30 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
     return cells;
   };
 
-  // Header Title formatted according to timeScale (matches CalendarView)
+  // Header Title formatted according to timeScale (Matches GanttView format)
   const headerTitle = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = monthNames[currentDate.getMonth()];
     const day = currentDate.getDate();
 
-    if (timeScale === 'year') {
-      return `${year}`;
-    }
-
-    if (timeScale === 'day') {
-      const dayName = englishDays[currentDate.getDay()];
-      return `${dayName.substring(0, 3)}, ${day} ${month.substring(0, 3)} ${year}`;
-    }
-
+    if (timeScale === 'year') return `${year}`;
+    if (timeScale === 'day') return `${day} ${month.substring(0, 3)} ${year}`;
     if (timeScale === 'week') {
       const mon = weekDays[0];
       const lastDay = weekDays[weekDays.length - 1];
-      const monYear = mon.getFullYear();
-      const lastDayYear = lastDay.getFullYear();
-
-      if (mon.getMonth() === lastDay.getMonth() && monYear === lastDayYear) {
-        return `${mon.getDate()}-${lastDay.getDate()} ${monthNames[mon.getMonth()].substring(0, 3)} ${monYear}`;
-      } else if (monYear === lastDayYear) {
-        return `${mon.getDate()} ${monthNames[mon.getMonth()].substring(0, 3)} - ${lastDay.getDate()} ${monthNames[lastDay.getMonth()].substring(0, 3)} ${monYear}`;
-      } else {
-        return `${mon.getDate()} ${monthNames[mon.getMonth()].substring(0, 3)} ${monYear} - ${lastDay.getDate()} ${monthNames[lastDay.getMonth()].substring(0, 3)} ${lastDayYear}`;
+      const sMonth = monthNames[mon.getMonth()].substring(0, 3);
+      const eMonth = monthNames[lastDay.getMonth()].substring(0, 3);
+      if (mon.getFullYear() !== lastDay.getFullYear()) {
+        return `${mon.getDate()} ${sMonth} ${mon.getFullYear()} - ${lastDay.getDate()} ${eMonth} ${lastDay.getFullYear()}`;
       }
+      return `${mon.getDate()} ${sMonth} - ${lastDay.getDate()} ${eMonth} ${year}`;
     }
 
-    if (timeScale === 'month') {
-      return `${month.substring(0, 3)} ${year}`;
-    }
-
-    return '';
+    return `${month} ${year}`;
   }, [currentDate, timeScale, weekDays]);
 
   return (
-    <div className="w-full pb-16 space-y-4">
+    <div className="w-full md:h-full md:flex md:flex-col md:min-h-0 space-y-2 pb-0">
       {/* Time-Based Unified Toolbar */}
       <TimeBasedToolbar
         projects={appData.projects}
@@ -1019,11 +1004,12 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
         headerTitle={headerTitle}
         timeScale={timeScale}
         onTimeScaleChange={setTimeScale}
+        hasActiveTimer={!!appData.settings.activeTimer}
       />
 
       {/* Secondary Controls Bar: Inactive Hours Toggle (Day view only) */}
       {timeScale === 'day' && (
-        <div className="flex items-center justify-end text-xs">
+        <div className="flex items-center justify-end text-xs shrink-0">
           <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-0.5 flex text-xs">
             <button
               type="button"
@@ -1058,14 +1044,14 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       )}
 
       {/* ================= GANTT TIMELINE MATRIX ================= */}
-      <div className="bg-[#121215] border border-[#27272a] rounded-xl overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto">
+      <div className="bg-[#121215] border border-[#27272a] rounded-none overflow-hidden shadow-2xl flex-1 min-h-0 flex flex-col md:h-full">
+        <div className="overflow-auto flex-1 min-h-0">
           {/* ================= 1. MONTH VIEW ================= */}
           {timeScale === 'month' && (
             <div style={{ minWidth: `${440 + monthDaysArray.length * 34}px` }}>
               {/* Header Timeline Dates */}
-              <div className="grid grid-cols-[420px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs font-mono text-[#a1a1aa]">
-                <div className="sticky left-0 z-30 bg-[#18181b] p-3 font-bold border-r border-[#27272a] flex items-center justify-between shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
+              <div className="grid grid-cols-[420px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs font-mono text-[#a1a1aa] sticky top-0 z-40">
+                <div className="sticky left-0 z-50 bg-[#18181b] p-3 font-bold border-r border-[#27272a] flex items-center justify-between shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
                   <span>Project & Task Hierarchy</span>
                   <span className="text-[10px] text-[#71717a] font-normal">Realization Range</span>
                 </div>
@@ -1449,8 +1435,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
           {timeScale === 'week' && (
             <div style={{ minWidth: `${440 + weekDays.length * 110}px` }}>
               {/* Header Days (Dynamic Monday - Sunday / Friday) */}
-              <div className="grid grid-cols-[420px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs font-mono text-[#a1a1aa]">
-                <div className="sticky left-0 z-30 bg-[#18181b] p-3 font-bold border-r border-[#27272a] flex items-center justify-between shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
+              <div className="grid grid-cols-[420px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs font-mono text-[#a1a1aa] sticky top-0 z-40">
+                <div className="sticky left-0 z-50 bg-[#18181b] p-3 font-bold border-r border-[#27272a] flex items-center justify-between shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
                   <span>Project & Task Hierarchy</span>
                   <span className="text-[10px] text-[#71717a] font-normal">Realization Range</span>
                 </div>
@@ -1830,8 +1816,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
           {timeScale === 'day' && (
             <div style={{ minWidth: `${420 + hoursArray.length * 138}px` }}>
               {/* Header Hours (3x wider columns) */}
-              <div className="grid grid-cols-[420px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs font-mono text-[#a1a1aa]">
-                <div className="sticky left-0 z-30 bg-[#18181b] p-3 font-bold border-r border-[#27272a] flex items-center justify-between shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
+              <div className="grid grid-cols-[420px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs font-mono text-[#a1a1aa] sticky top-0 z-40">
+                <div className="sticky left-0 z-50 bg-[#18181b] p-3 font-bold border-r border-[#27272a] flex items-center justify-between shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
                   <span>Project & Task Hierarchy</span>
                   <span className="text-[10px] text-[#71717a] font-normal">
                     {hideInactiveHours ? 'Active Hours (06-20)' : '24h Timeline'}
@@ -2196,8 +2182,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
           {timeScale === 'year' && (
             <div style={{ minWidth: '1380px' }}>
               {/* Header 12 Months */}
-              <div className="grid grid-cols-[420px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs font-mono text-[#a1a1aa]">
-                <div className="sticky left-0 z-30 bg-[#18181b] p-3 font-bold border-r border-[#27272a] flex items-center justify-between shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
+              <div className="grid grid-cols-[420px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs font-mono text-[#a1a1aa] sticky top-0 z-40">
+                <div className="sticky left-0 z-50 bg-[#18181b] p-3 font-bold border-r border-[#27272a] flex items-center justify-between shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
                   <span>Project & Task Hierarchy</span>
                   <span className="text-[10px] text-[#71717a] font-normal">{currentYear} Full Year</span>
                 </div>

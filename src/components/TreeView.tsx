@@ -954,9 +954,10 @@ export const TreeView: React.FC<TreeViewProps> = ({
         searchQuery={currentSearchQuery}
         onSearchChange={handleSearchInputChange}
         onOpenProjectModal={onOpenProjectModal}
+        hasActiveTimer={!!appData.settings.activeTimer}
       />
 
-      <div className="max-w-[1400px] mx-auto space-y-6 pt-4 md:pt-6">
+      <div className="w-full space-y-6 pt-4 md:pt-6">
         {activeProjects.length === 0 ? (
         <div className="bg-[#121215] rounded-xl border border-[#27272a] p-12 text-center text-[#71717a] space-y-4 shadow-2xl">
           <Folder className="w-12 h-12 mx-auto text-[#3f3f46]" />

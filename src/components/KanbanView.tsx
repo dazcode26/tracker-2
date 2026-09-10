@@ -278,26 +278,30 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   };
 
   return (
-    <div className="w-full pb-16">
+    <div className="w-full h-full flex flex-col min-h-0 pb-0">
       {/* Structural Toolbar */}
-      <StructureToolbar
-        projects={appData.projects}
-        selectedProjectId={currentProjectId}
-        onSelectProject={handleFilterChange}
-        persons={appData.persons}
-        selectedPersonId={selectedPersonId}
-        onSelectPerson={onSelectPersonFilter}
-        sortBy={sortBy}
-        onSortByChange={handleSortByChange}
-        sortDirection={sortDirection}
-        onToggleSortDirection={handleToggleSortDirection}
-        searchQuery={currentSearchQuery}
-        onSearchChange={handleSearchInputChange}
-        onOpenProjectModal={onOpenProjectModal}
-      />
+      <div className="shrink-0">
+        <StructureToolbar
+          projects={appData.projects}
+          selectedProjectId={currentProjectId}
+          onSelectProject={handleFilterChange}
+          persons={appData.persons}
+          selectedPersonId={selectedPersonId}
+          onSelectPerson={onSelectPersonFilter}
+          sortBy={sortBy}
+          onSortByChange={handleSortByChange}
+          sortDirection={sortDirection}
+          onToggleSortDirection={handleToggleSortDirection}
+          searchQuery={currentSearchQuery}
+          onSearchChange={handleSearchInputChange}
+          onOpenProjectModal={onOpenProjectModal}
+          hasActiveTimer={!!appData.settings.activeTimer}
+        />
+      </div>
 
-      <div className="max-w-[1400px] mx-auto pt-4 md:pt-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+      {/* Board Area: full height, horizontal scroll if screen cannot fit 4 columns, no vertical outer scroll */}
+      <div className="w-full flex-1 min-h-0 overflow-x-auto overflow-y-hidden pt-2.5 pb-2.5 md:pb-3">
+        <div className="flex flex-row items-stretch gap-3 md:gap-4 h-full min-h-0 w-full min-w-fit">
         {columns.map((col) => {
           const colItems = flatItems.filter((f) => f.item.status === col.status);
           if (sortBy !== 'default') {
@@ -307,10 +311,10 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
           return (
             <div
               key={col.status}
-              className="bg-[#121215] border border-[#27272a] rounded-lg p-3 flex flex-col min-h-[500px]"
+              className="flex-1 min-w-[260px] sm:min-w-[270px] bg-[#121215] border border-[#27272a] rounded-lg p-3 flex flex-col h-full min-h-0 shrink-0"
             >
               {/* Column Header */}
-              <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#27272a] px-1">
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#27272a] px-1 shrink-0">
                 <div className="flex items-center gap-2">
                   <span
                     className="w-2.5 h-2.5 rounded-full"
@@ -323,8 +327,11 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                 </div>
               </div>
 
-              {/* Cards List */}
-              <div className="space-y-3 flex-1 overflow-y-auto max-h-[650px] pr-1">
+              {/* Cards List: Scrollbar inside each box only */}
+              <div
+                className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-1 overscroll-contain"
+                style={{ scrollbarWidth: 'thin' }}
+              >
                 {colItems.map(({ item, project, parentPath }) => {
                   const isRunning = activeTimer?.itemId === item.id;
                   const loggedSecs = getItemLoggedSeconds(

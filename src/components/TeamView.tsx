@@ -119,7 +119,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-[1400px] mx-auto pb-16 pt-4 md:pt-6">
+    <div className="space-y-6 w-full pb-16 pt-4 md:pt-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-[#f4f4f5]">Team Directory</h2>

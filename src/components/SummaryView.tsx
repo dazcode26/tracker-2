@@ -237,18 +237,14 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
     setCurrentDate(d);
   };
 
-  // Header Title generation based on granularity (Matches CalendarView format)
+  // Header Title generation based on granularity (Matches GanttView format)
   const headerTitle = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = MONTH_NAMES[currentDate.getMonth()];
     const day = currentDate.getDate();
 
-    if (granularity === 'day') {
-      const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-      const dayName = daysOfWeek[(currentDate.getDay() + 6) % 7];
-      return `${dayName.substring(0, 3)}, ${day} ${month.substring(0, 3)} ${year}`;
-    }
-
+    if (granularity === 'year') return `${year}`;
+    if (granularity === 'day') return `${day} ${month.substring(0, 3)} ${year}`;
     if (granularity === 'week') {
       // Find Monday of current week
       const dayOfWeek = (currentDate.getDay() + 6) % 7; // 0 for Monday
@@ -257,19 +253,12 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
       const endDay = new Date(monday);
       endDay.setDate(monday.getDate() + 6);
 
-      if (monday.getMonth() === endDay.getMonth()) {
-        return `${monday.getDate()}-${endDay.getDate()} ${MONTH_NAMES[monday.getMonth()].substring(0, 3)} ${year}`;
-      } else {
-        return `${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].substring(0, 3)} - ${endDay.getDate()} ${MONTH_NAMES[endDay.getMonth()].substring(0, 3)} ${year}`;
+      const sMonth = MONTH_NAMES[monday.getMonth()].substring(0, 3);
+      const eMonth = MONTH_NAMES[endDay.getMonth()].substring(0, 3);
+      if (monday.getFullYear() !== endDay.getFullYear()) {
+        return `${monday.getDate()} ${sMonth} ${monday.getFullYear()} - ${endDay.getDate()} ${eMonth} ${endDay.getFullYear()}`;
       }
-    }
-
-    if (granularity === 'month') {
-      return `${month.substring(0, 3)} ${year}`;
-    }
-
-    if (granularity === 'year') {
-      return `${year}`;
+      return `${monday.getDate()} ${sMonth} - ${endDay.getDate()} ${eMonth} ${year}`;
     }
 
     return `${month} ${year}`;
@@ -674,7 +663,7 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
   };
 
   return (
-    <div className="w-full pb-16 space-y-4">
+    <div className="w-full space-y-2 pb-16">
       {/* Time-Based Unified Toolbar */}
       <TimeBasedToolbar
         projects={appData.projects}
@@ -698,9 +687,10 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
           setGranularity(scale);
           if (onTimeScaleChange) onTimeScaleChange(scale);
         }}
+        hasActiveTimer={!!appData.settings.activeTimer}
       />
 
-      <div className="max-w-[1400px] mx-auto space-y-4">
+      <div className="w-full space-y-4 pt-1">
         {/* Summary Stat Badges (Dynamic to selected period & filter) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-[#121215] border border-[#27272a] rounded-xl p-3.5 flex items-center justify-between shadow-md">

@@ -17,6 +17,7 @@ import { ItemModal } from './components/ItemModal';
 import { ProjectModal } from './components/ProjectModal';
 import { SettingsModal } from './components/SettingsModal';
 import { LoginScreen } from './components/LoginScreen';
+import { ActiveTimerBanner } from './components/ActiveTimerBanner';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useWorkspaceSync } from './hooks/useWorkspaceSync';
 import {
@@ -898,29 +899,63 @@ function WorkspaceApp() {
   }
 
   return (
-    <div className="min-h-screen bg-[#101010] text-[#f4f4f5] font-sans antialiased flex flex-row">
-      {/* Left Navigation Sidebar */}
-      <Header
-        currentView={currentView}
-        onSelectView={handleSelectView}
+    <div
+      className={`bg-[#101010] text-[#f4f4f5] font-sans antialiased flex flex-col ${
+        currentView === 'tasks' || currentView === 'calendar' || currentView === 'timeline' || currentView === 'gantt'
+          ? 'h-screen max-h-screen overflow-hidden'
+          : 'min-h-screen'
+      }`}
+    >
+      {/* Dynamic Theme-Aware Active Timer Top Banner (Spans 100% full width above sidebar & main) */}
+      <ActiveTimerBanner
         appData={appData}
         onStopTimer={handleStopTimer}
-        onOpenSettings={() => setIsSettingsModalOpen(true)}
-        onSignOut={handleSignOut}
-        onUpdateTheme={handleUpdateTheme}
-        currentUser={currentUser}
-        syncStatus={syncStatus}
-        lastSyncedAt={lastSyncedAt}
-        onTriggerSync={triggerManualSync}
-        onPullFromCloud={forcePullFromCloud}
+        onOpenItemModal={(item) => openEditItemModal(item)}
       />
 
-      {/* Main Content Area - Offset by Sidebar Width on Desktop, and padded bottom for Mobile Bottom Bar */}
-      <main
-        className="flex-1 min-w-0 ml-0 md:ml-16 min-h-screen w-full overflow-x-clip px-3 sm:px-6 lg:px-8 pt-0 pb-24 md:pt-0 md:pb-6"
-        style={{ overflowX: 'clip' }}
+      <div
+        className={`flex-1 min-h-0 flex flex-row relative ${
+          currentView === 'tasks' || currentView === 'calendar' || currentView === 'timeline' || currentView === 'gantt'
+            ? 'h-full overflow-hidden'
+            : ''
+        }`}
       >
-        <div className="w-full">
+        {/* Left Navigation Sidebar */}
+        <Header
+          currentView={currentView}
+          onSelectView={handleSelectView}
+          appData={appData}
+          onStopTimer={handleStopTimer}
+          onOpenSettings={() => setIsSettingsModalOpen(true)}
+          onSignOut={handleSignOut}
+          onUpdateTheme={handleUpdateTheme}
+          currentUser={currentUser}
+          syncStatus={syncStatus}
+          lastSyncedAt={lastSyncedAt}
+          onTriggerSync={triggerManualSync}
+          onPullFromCloud={forcePullFromCloud}
+        />
+
+        {/* Main Content Area - Offset by Sidebar Width on Desktop, and padded bottom for Mobile Bottom Bar */}
+        <main
+          className={`flex-1 min-w-0 ml-0 md:ml-16 w-full overflow-x-clip px-3 sm:px-6 lg:px-8 pt-0 md:pt-0 ${
+            currentView === 'tasks'
+              ? 'h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col pb-16 md:pb-0 md:h-full md:max-h-full'
+              : currentView === 'calendar' || currentView === 'timeline' || currentView === 'gantt'
+              ? 'pb-20 md:pb-0 md:h-full md:max-h-full md:overflow-hidden md:flex md:flex-col'
+              : 'min-h-screen pb-24 md:pb-6'
+          }`}
+          style={{ overflowX: 'clip' }}
+        >
+          <div
+            className={`w-full ${
+              currentView === 'tasks'
+                ? 'h-full flex flex-col min-h-0'
+                : currentView === 'calendar' || currentView === 'timeline' || currentView === 'gantt'
+                ? 'md:h-full md:flex md:flex-col md:min-h-0'
+                : ''
+            }`}
+          >
           {currentView === 'projects' && (
             <TreeView
               appData={appData}
@@ -1096,6 +1131,7 @@ function WorkspaceApp() {
           )}
         </div>
       </main>
+      </div>
 
       {/* Modals */}
       <ItemModal

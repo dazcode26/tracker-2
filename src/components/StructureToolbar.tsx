@@ -39,6 +39,9 @@ export interface StructureToolbarProps {
 
   // Action Button
   onOpenProjectModal: () => void;
+
+  // Active Timer status for sticky positioning
+  hasActiveTimer?: boolean;
 }
 
 export const StructureToolbar: React.FC<StructureToolbarProps> = ({
@@ -55,6 +58,7 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
   searchQuery,
   onSearchChange,
   onOpenProjectModal,
+  hasActiveTimer = false,
 }) => {
   const [projectAnchor, setProjectAnchor] = useState<{ rect: DOMRect; el: HTMLElement } | null>(null);
   const [personAnchor, setPersonAnchor] = useState<{ rect: DOMRect; el: HTMLElement } | null>(null);
@@ -209,8 +213,12 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
   };
 
   return (
-    <div className="sticky top-0 z-30 py-2 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 bg-[#101010]/95 dark:bg-[#101010]/95 [data-theme=light]:bg-[#f8fafc]/95 backdrop-blur-md border-b border-[#27272a] [data-theme=light]:border-[#e2e8f0] shadow-lg shadow-black/25">
-      <div className="max-w-[1400px] mx-auto w-full">
+    <div
+      className={`sticky ${
+        hasActiveTimer ? 'top-9' : 'top-0'
+      } z-30 py-2 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 bg-[#101010] [data-theme=light]:bg-[#f8fafc] transition-[top] duration-200`}
+    >
+      <div className="w-full">
         <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-y-2 gap-x-2 md:gap-3 py-1 md:py-0 md:h-9 relative w-full">
           {/* ACTIONS: ROW 1 ON MOBILE (order-1 w-full), RIGHT SIDE ON DESKTOP (order-2 md:w-auto md:ml-auto) */}
           <div className="order-1 w-full md:w-auto md:order-2 flex items-center gap-2 md:ml-auto shrink-0">

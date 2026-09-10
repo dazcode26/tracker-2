@@ -804,17 +804,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     setCurrentDate(new Date());
   };
 
-  // Header Title formatted according to viewType
+  // Header Title formatted according to viewType (Matches GanttView format)
   const headerTitle = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = MONTH_NAMES[currentDate.getMonth()];
     const day = currentDate.getDate();
 
-    if (viewType === 'day') {
-      const dayName = DAYS_OF_WEEK_MON[(currentDate.getDay() + 6) % 7];
-      return `${dayName.substring(0, 3)}, ${day} ${month.substring(0, 3)} ${year}`;
-    }
-
+    if (viewType === 'year') return `${year}`;
+    if (viewType === 'day') return `${day} ${month.substring(0, 3)} ${year}`;
     if (viewType === 'week') {
       // Find Monday of current week
       const dayOfWeek = (currentDate.getDay() + 6) % 7; // 0 for Monday
@@ -823,22 +820,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       const endDay = new Date(monday);
       endDay.setDate(monday.getDate() + (showWeekends ? 6 : 4));
 
-      if (monday.getMonth() === endDay.getMonth()) {
-        return `${monday.getDate()}-${endDay.getDate()} ${MONTH_NAMES[monday.getMonth()].substring(0, 3)} ${year}`;
-      } else {
-        return `${monday.getDate()} ${MONTH_NAMES[monday.getMonth()].substring(0, 3)} - ${endDay.getDate()} ${MONTH_NAMES[endDay.getMonth()].substring(0, 3)} ${year}`;
+      const sMonth = MONTH_NAMES[monday.getMonth()].substring(0, 3);
+      const eMonth = MONTH_NAMES[endDay.getMonth()].substring(0, 3);
+      if (monday.getFullYear() !== endDay.getFullYear()) {
+        return `${monday.getDate()} ${sMonth} ${monday.getFullYear()} - ${endDay.getDate()} ${eMonth} ${endDay.getFullYear()}`;
       }
+      return `${monday.getDate()} ${sMonth} - ${endDay.getDate()} ${eMonth} ${year}`;
     }
 
-    if (viewType === 'month') {
-      return `${month.substring(0, 3)} ${year}`;
-    }
-
-    if (viewType === 'year') {
-      return `${year}`;
-    }
-
-    return '';
+    return `${month} ${year}`;
   }, [currentDate, viewType, showWeekends]);
 
   // Today comparison helper
@@ -946,7 +936,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     const dayHeadersMon = showWeekends ? DAYS_OF_WEEK_MON : DAYS_OF_WEEK_MON.slice(0, 5);
 
     return (
-      <div className="flex flex-col flex-1 bg-[#121215] border border-[#27272a] rounded-2xl overflow-hidden shadow-xl md:h-[calc(100vh-125px)] min-h-[520px]">
+      <div className="flex flex-col flex-1 bg-[#121215] border border-[#27272a] rounded-none overflow-hidden shadow-xl min-h-0 md:h-full">
         {/* Column Day Header (Monday to Sunday or Monday to Friday) */}
         <div className={`grid ${showWeekends ? 'grid-cols-7' : 'grid-cols-5'} border-b border-[#27272a] bg-[#18181b]/80 shrink-0`}>
           {dayHeadersShort.map((dayName, idx) => {
@@ -1120,7 +1110,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     const hourHeight = 56; // px per hour
 
     return (
-      <div className="flex flex-col flex-1 bg-[#121215] border border-[#27272a] rounded-2xl overflow-hidden shadow-xl md:h-[calc(100vh-125px)] min-h-[520px]">
+      <div className="flex flex-col flex-1 bg-[#121215] border border-[#27272a] rounded-none overflow-hidden shadow-xl min-h-0 md:h-full">
         {/* Top Header: Date Columns + All-Day Task Row */}
         <div className="flex border-b border-[#27272a] bg-[#18181b]/95 z-20 shrink-0">
           {/* Time Gutter Header (Left) */}
@@ -1354,7 +1344,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     const months = Array.from({ length: 12 }, (_, i) => i);
 
     return (
-      <div className="flex flex-col flex-1 bg-[#121215] border border-[#27272a] rounded-2xl p-4 sm:p-6 shadow-xl overflow-y-auto md:h-[calc(100vh-125px)] min-h-[520px]">
+      <div className="flex flex-col flex-1 bg-[#121215] border border-[#27272a] rounded-none p-4 sm:p-6 shadow-xl overflow-y-auto min-h-0 md:h-full">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {months.map((mIdx) => {
             const firstDay = new Date(year, mIdx, 1);
@@ -1463,7 +1453,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   return (
-    <div className="w-full pb-16 space-y-4">
+    <div className="w-full md:h-full md:flex md:flex-col md:min-h-0 space-y-2 pb-0">
       {/* Time-Based Unified Toolbar */}
       <TimeBasedToolbar
         projects={appData.projects}
@@ -1482,6 +1472,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         headerTitle={headerTitle}
         timeScale={viewType}
         onTimeScaleChange={setViewType}
+        hasActiveTimer={!!appData.settings.activeTimer}
       />
 
       {/* Main Calendar View Area */}

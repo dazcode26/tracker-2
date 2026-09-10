@@ -738,7 +738,7 @@ export const GanttView: React.FC<GanttViewProps> = ({
   const activeTimerItemId = appData.settings?.activeTimer?.itemId;
 
   return (
-    <div className="w-full pb-16 space-y-3">
+    <div className="w-full md:h-full md:flex md:flex-col md:min-h-0 space-y-2 pb-0">
       {/* Standardized Time-Based Toolbar */}
       <TimeBasedToolbar
         projects={appData.projects}
@@ -761,12 +761,13 @@ export const GanttView: React.FC<GanttViewProps> = ({
         onToggleWeekends={() => setShowWeekends(!showWeekends)}
         showCompleted={showCompleted}
         onToggleCompleted={() => setShowCompleted(!showCompleted)}
+        hasActiveTimer={!!appData.settings.activeTimer}
       />
 
       {/* GANTT DUAL-PANE CONTAINER */}
-      <div className="bg-[#18181b] border border-[#27272a] rounded-2xl shadow-xl overflow-hidden flex flex-col">
+      <div className="bg-[#18181b] border border-[#27272a] rounded-none shadow-xl overflow-hidden flex flex-col flex-1 min-h-0 md:h-full">
         {/* Top Information Strip & Quick Expand Controls */}
-        <div className="px-3 sm:px-4 py-2 bg-[#141418]/60 border-b border-[#27272a] flex items-center justify-between gap-2 text-xs">
+        <div className="px-3 sm:px-4 py-2 bg-[#141418]/60 border-b border-[#27272a] flex items-center justify-between gap-2 text-xs shrink-0">
           <div className="flex items-center gap-3 text-[#a1a1aa]">
             <span className="font-semibold text-[#f4f4f5] flex items-center gap-1.5">
               <SlidersHorizontal className="w-3.5 h-3.5 text-orange-500" />
@@ -813,7 +814,7 @@ export const GanttView: React.FC<GanttViewProps> = ({
         </div>
 
         {/* Dual Split Table & Gantt Canvas - Natural content height */}
-        <div className="flex flex-1 max-h-[75vh] relative overflow-hidden">
+        <div className="flex flex-1 min-h-0 relative overflow-hidden">
           {/* LEFT PANE: WBS / HIERARCHY TREE LIST */}
           <div
             ref={leftTableRef}

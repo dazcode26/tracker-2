@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   LayoutDashboard,
   ListTree,
@@ -11,7 +11,6 @@ import {
   Users,
   Archive,
   Settings,
-  Square,
   LogOut,
   Sun,
   Moon,
@@ -25,7 +24,6 @@ import {
   Terminal,
 } from 'lucide-react';
 import { ViewMode, AppData, AppTheme, AccentColor, AuthUser, SyncStatus } from '../types';
-import { findItemById, formatTimerClock } from '../utils/treeUtils';
 
 interface HeaderProps {
   currentView: ViewMode;
@@ -56,7 +54,6 @@ export const Header: React.FC<HeaderProps> = ({
   onTriggerSync,
   onPullFromCloud,
 }) => {
-  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [showUserMenu, setShowUserMenu] = useState<boolean>(false);
   const [isSyncingManual, setIsSyncingManual] = useState<boolean>(false);
   const [isPullingManual, setIsPullingManual] = useState<boolean>(false);
@@ -116,28 +113,6 @@ export const Header: React.FC<HeaderProps> = ({
   const userDisplayName = currentUser?.displayName || "Project Manager";
   const userEmail = currentUser?.email || "admin@tracker.com";
 
-  const activeTimer = appData.settings.activeTimer;
-  const activeItemInfo = activeTimer ? findItemById(appData, activeTimer.itemId) : null;
-
-  // Active timer live tick effect
-  useEffect(() => {
-    if (!activeTimer) {
-      setElapsedSeconds(0);
-      return;
-    }
-
-    const calculateElapsed = () => {
-      const startMs = new Date(activeTimer.startedAt).getTime();
-      const nowMs = Date.now();
-      const diff = Math.floor((nowMs - startMs) / 1000);
-      setElapsedSeconds(diff > 0 ? diff : 0);
-    };
-
-    calculateElapsed();
-    const interval = setInterval(calculateElapsed, 1000);
-    return () => clearInterval(interval);
-  }, [activeTimer]);
-
   const navItems: { view: ViewMode; label: string; icon: React.ReactNode }[] = [
     { view: 'projects', label: 'Tree', icon: <ListTree className="w-5 h-5 shrink-0" /> },
     { view: 'tasks', label: 'Kanban', icon: <Kanban className="w-5 h-5 shrink-0" /> },
@@ -147,10 +122,16 @@ export const Header: React.FC<HeaderProps> = ({
     { view: 'analytics', label: 'Summary', icon: <BarChart3 className="w-5 h-5 shrink-0" /> },
   ];
 
+  const hasActiveTimer = !!appData.settings.activeTimer;
+
   return (
     <>
       {/* Desktop Left Navigation Sidebar (Icon Rail Style) */}
-      <aside className="hidden md:flex fixed top-0 left-0 bottom-0 z-40 bg-[#101010] border-r border-[#27272a] flex-col items-center justify-between transition-all duration-300 w-16 py-3.5 select-none shadow-xl">
+      <aside
+        className={`hidden md:flex fixed ${
+          hasActiveTimer ? 'top-9' : 'top-0'
+        } left-0 bottom-0 z-40 bg-[#101010] flex-col items-center justify-between transition-all duration-200 w-16 py-3.5 select-none`}
+      >
         {/* Top Section: Nav Items directly at the top */}
         <div className="flex flex-col items-center w-full px-2">
           {/* Navigation Items List */}
@@ -163,7 +144,7 @@ export const Header: React.FC<HeaderProps> = ({
                     onClick={() => onSelectView(item.view)}
                     className={`flex items-center justify-center w-11 h-11 text-sm font-medium rounded-xl transition-all relative cursor-pointer ${
                       isActive
-                        ? 'text-orange-400 font-semibold bg-orange-500/15 shadow-sm shadow-orange-500/10'
+                        ? 'text-orange-400 font-semibold bg-orange-500/15'
                         : 'text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#18181b]'
                     }`}
                   >
@@ -186,7 +167,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Bottom Section: Sync Status, Theme Toggle & User Profile Avatar */}
-        <div className="relative pt-2.5 border-t border-[#27272a]/80 w-full flex flex-col items-center gap-2">
+        <div className="relative pt-2.5 w-full flex flex-col items-center gap-2">
           {/* Cloud Sync Status Indicator Icon */}
           <div className="relative group w-full flex justify-center">
             <button
@@ -426,7 +407,7 @@ export const Header: React.FC<HeaderProps> = ({
       </aside>
 
       {/* Mobile Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#18181b]/95 backdrop-blur-lg border-t border-[#27272a] px-3 py-2 flex items-center justify-around select-none shadow-2xl transition-colors">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#101010] [data-theme=light]:bg-[#f8fafc] border-t border-[#27272a] [data-theme=light]:border-[#e2e8f0] px-3 py-2 flex items-center justify-around select-none transition-colors">
         {navItems.map((item) => {
           const isActive = currentView === item.view;
           return (
@@ -611,31 +592,6 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
       </nav>
-
-      {/* Floating Active Timer Widget */}
-      {activeTimer && activeItemInfo && (
-        <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-50 flex items-center gap-3.5 bg-[#18181b]/95 backdrop-blur-md border border-orange-500/50 px-4 py-2.5 rounded-2xl shadow-2xl shadow-orange-500/20 text-xs animate-in fade-in slide-in-from-bottom-4">
-          <span className="relative flex h-3 w-3 shrink-0">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-500 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500"></span>
-          </span>
-          <div className="flex flex-col text-left truncate max-w-[160px] sm:max-w-[200px]">
-            <span className="text-[10px] text-orange-400 font-bold uppercase tracking-wider truncate">
-              {activeItemInfo.item.name}
-            </span>
-            <span className="text-xs font-mono font-extrabold text-[#f4f4f5] leading-tight">
-              {formatTimerClock(elapsedSeconds)}
-            </span>
-          </div>
-          <button
-            onClick={onStopTimer}
-            className="bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-xl transition-all flex items-center justify-center shadow-md shrink-0 ml-1 cursor-pointer hover:scale-105 active:scale-95"
-            title="Stop Timer & Log Session"
-          >
-            <Square className="w-3.5 h-3.5 fill-current" />
-          </button>
-        </div>
-      )}
     </>
   );
 };

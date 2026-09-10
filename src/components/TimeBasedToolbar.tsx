@@ -45,6 +45,9 @@ export interface TimeBasedToolbarProps {
   timeScale: TimeScaleOption;
   onTimeScaleChange: (scale: TimeScaleOption) => void;
   allowedTimeScales?: TimeScaleOption[];
+
+  // Active Timer status for sticky positioning
+  hasActiveTimer?: boolean;
 }
 
 const MONTH_NAMES = [
@@ -70,6 +73,7 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
   timeScale,
   onTimeScaleChange,
   allowedTimeScales = ['day', 'week', 'month', 'year'],
+  hasActiveTimer = false,
 }) => {
   // Portal Menu Anchors
   const [projectAnchor, setProjectAnchor] = useState<{ rect: DOMRect; el: HTMLElement } | null>(null);
@@ -344,9 +348,13 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
 
   return (
     <>
-      {/* Sticky Unified Controls Bar (Consistent position & height, no animations) */}
-      <div className="sticky top-0 z-30 py-2 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 bg-[#101010]/95 dark:bg-[#101010]/95 [data-theme=light]:bg-[#f8fafc]/95 backdrop-blur-md border-b border-[#27272a] [data-theme=light]:border-[#e2e8f0] shadow-lg shadow-black/25">
-        <div className="max-w-[1400px] mx-auto w-full">
+      {/* Sticky Unified Controls Bar (Consistent position & height, matching menu & main container background) */}
+      <div
+        className={`sticky ${
+          hasActiveTimer ? 'top-9' : 'top-0'
+        } z-30 py-2 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 bg-[#101010] [data-theme=light]:bg-[#f8fafc] shrink-0 transition-[top] duration-200`}
+      >
+        <div className="w-full">
           <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-y-2 gap-x-2 md:gap-3 py-1 md:py-0 md:h-9 relative w-full">
           {/* SEARCH & CONTROLS: ROW 1 ON MOBILE (order-1 w-full), RIGHT SIDE ON DESKTOP (order-2 md:w-auto md:ml-auto) */}
           <div className="order-1 w-full md:w-auto md:order-2 flex items-center gap-2 md:ml-auto shrink-0">
@@ -746,7 +754,7 @@ export const TimeBasedToolbar: React.FC<TimeBasedToolbarProps> = ({
     </div>
 
     {/* Contextual Information H2 & Navigation on all viewports (Mobile & Desktop) */}
-    <div className="max-w-[1400px] mx-auto w-full pt-1 pb-0.5 flex items-center justify-between gap-2">
+    <div className="w-full pt-1 pb-0.5 flex items-center justify-between gap-2 shrink-0">
           {/* Interactive Date Header with Date Picker Popover */}
           <div className="relative min-w-0">
             <button
