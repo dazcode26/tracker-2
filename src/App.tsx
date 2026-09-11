@@ -38,6 +38,8 @@ import {
   setAllExpandInProjects,
   reassignPersonTasksInProjects,
   setMilestoneTarget,
+  moveAndReorderItemInProjects,
+  reorderKanbanItemInProjects,
 } from './utils/treeUtils';
 
 function WorkspaceApp() {
@@ -671,6 +673,43 @@ function WorkspaceApp() {
     persistData(updatedData);
   };
 
+  // Move & Reorder Item by target position and optional new status (e.g. for Kanban drag-and-drop)
+  const handleReorderOrMoveItem = (
+    sourceItemId: string,
+    targetItemId: string | null,
+    position: 'before' | 'after',
+    newStatus?: ItemStatus
+  ) => {
+    const sourceInfo = findItemById(appData, sourceItemId);
+    const itemTitle = sourceInfo ? sourceInfo.item.name : 'Task';
+
+    const updatedProjects = reorderKanbanItemInProjects(
+      appData.projects,
+      sourceItemId,
+      targetItemId,
+      position,
+      newStatus
+    );
+
+    const isStatusChanged = newStatus && sourceInfo && sourceInfo.item.status !== newStatus;
+    const logMessage = isStatusChanged
+      ? `Moved "${itemTitle}" to ${newStatus.toUpperCase()}`
+      : `Reordered task "${itemTitle}"`;
+
+    const updatedData: AppData = {
+      ...appData,
+      projects: updatedProjects,
+      activityLogs: addLog(
+        isStatusChanged ? 'status_change' : 'task_updated',
+        logMessage,
+        sourceItemId,
+        itemTitle
+      ),
+    };
+
+    persistData(updatedData);
+  };
+
   // Duplicate Item (all variables reset to default except name)
   const handleDuplicateItem = (itemId: string) => {
     const itemInfo = findItemById(appData, itemId);
@@ -1047,6 +1086,7 @@ function WorkspaceApp() {
               onOpenProjectModal={openProjectModal}
               onDuplicateItem={handleDuplicateItem}
               onReorderItem={handleReorderItem}
+              onReorderOrMoveItem={handleReorderOrMoveItem}
               onDeleteItem={handleDeleteItem}
               selectedProjectId={selectedProjectId}
               onSelectProjectFilter={handleSelectProjectFilter}

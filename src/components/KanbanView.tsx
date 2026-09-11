@@ -12,20 +12,34 @@ interface MenuAnchorState {
   el: HTMLElement;
 }
 
-// Contrast helper to ensure text on dynamic project color backgrounds is always WCAG legible
-const isLightColor = (hex?: string): boolean => {
-  if (!hex || !hex.startsWith('#')) return false;
+// Helper to generate solid (opaque) 20% tint of a hex color blended onto white (#ffffff)
+const getSolidKanbanTint = (hex?: string): string => {
+  if (!hex || !hex.startsWith('#')) return '#f3f4f6';
   const c = hex.replace('#', '');
-  if (c.length !== 6 && c.length !== 3) return false;
+  if (c.length !== 6 && c.length !== 3) return '#f3f4f6';
   const full = c.length === 3 ? c.split('').map((x) => x + x).join('') : c;
   const r = parseInt(full.substring(0, 2), 16);
   const g = parseInt(full.substring(2, 4), 16);
   const b = parseInt(full.substring(4, 6), 16);
-  if (isNaN(r) || isNaN(g) || isNaN(b)) return false;
-  // Threshold at 170: colors with YIQ < 170 (including orange, red, amber, green, blue) use crisp white text;
-  // only genuinely bright/pale/pastel colors use dark text.
-  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-  return yiq >= 170;
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return '#f3f4f6';
+  // 20% project color + 80% white (r: 255, g: 255, b: 255) - solid, zero transparency
+  const r20 = Math.round(r * 0.2 + 255 * 0.8);
+  const g20 = Math.round(g * 0.2 + 255 * 0.8);
+  const b20 = Math.round(b * 0.2 + 255 * 0.8);
+  return `rgb(${r20}, ${g20}, ${b20})`;
+};
+
+// Helper to convert hex color to rgba with specific opacity
+const hexToRgba = (hex?: string, alpha: number = 0.2): string => {
+  if (!hex || !hex.startsWith('#')) return `rgba(249, 115, 22, ${alpha})`;
+  const c = hex.replace('#', '');
+  if (c.length !== 6 && c.length !== 3) return `rgba(249, 115, 22, ${alpha})`;
+  const full = c.length === 3 ? c.split('').map((x) => x + x).join('') : c;
+  const r = parseInt(full.substring(0, 2), 16);
+  const g = parseInt(full.substring(2, 4), 16);
+  const b = parseInt(full.substring(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(249, 115, 22, ${alpha})`;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
 interface KanbanViewProps {
@@ -38,6 +52,12 @@ interface KanbanViewProps {
   onOpenProjectModal?: () => void;
   onDuplicateItem?: (itemId: string) => void;
   onReorderItem?: (itemId: string, direction: 'up' | 'down') => void;
+  onReorderOrMoveItem?: (
+    sourceItemId: string,
+    targetItemId: string | null,
+    position: 'before' | 'after',
+    newStatus?: ItemStatus
+  ) => void;
   onDeleteItem?: (itemId: string) => void;
   selectedProjectId?: string;
   onSelectProjectFilter?: (projectId: string) => void;
@@ -61,6 +81,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   onOpenProjectModal,
   onDuplicateItem,
   onReorderItem,
+  onReorderOrMoveItem,
   onDeleteItem,
   selectedProjectId = 'all',
   onSelectProjectFilter,
@@ -75,6 +96,15 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
 }) => {
   const [activeStatusAnchor, setActiveStatusAnchor] = useState<MenuAnchorState | null>(null);
   const [activeTaskMenuAnchor, setActiveTaskMenuAnchor] = useState<MenuAnchorState | null>(null);
+
+  // Drag and Drop state
+  const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
+  const [dragOverColStatus, setDragOverColStatus] = useState<ItemStatus | null>(null);
+  const [dropTarget, setDropTarget] = useState<{
+    targetItemId: string;
+    position: 'before' | 'after';
+    colStatus: ItemStatus;
+  } | null>(null);
 
   // Close active dropdowns on Escape key
   useEffect(() => {
@@ -204,52 +234,43 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   const STATUS_SEQUENCE: ItemStatus[] = ['not-started', 'in-progress', 'review', 'completed'];
 
   const getProjectCardStyle = (projectColor?: string, isRunning?: boolean) => {
-    const bg = projectColor || '#18181b';
+    const color = projectColor || '#f97316';
+    const bg = getSolidKanbanTint(color);
     if (isRunning) {
       return {
         backgroundColor: bg,
-        borderColor: 'var(--accent-main, #f97316)',
-        boxShadow: '0 0 0 2px var(--accent-main, #f97316)',
+        outline: '2px solid var(--accent-main, #f97316)',
       };
     }
     return {
       backgroundColor: bg,
-      borderColor: 'rgba(255, 255, 255, 0.15)',
     };
   };
 
-  const renderBreadcrumbs = (parentPath: string[], projectTitle: string, projectColor?: string, isLightBg?: boolean) => {
+  const renderBreadcrumbs = (parentPath: string[], projectTitle: string, projectColor?: string) => {
     const effectivePath = parentPath && parentPath.length > 0 ? parentPath : [projectTitle];
     const fullPathStr = effectivePath.join(' > ');
 
     return (
       <div className="flex items-center gap-1 text-[10px] font-mono min-w-0 flex-wrap" title={`Full Path: ${fullPathStr}`}>
         <span
-          className={`w-2 h-2 rounded-full shrink-0 ${isLightBg ? 'border border-black/30' : 'border border-white/40'}`}
+          className="w-2 h-2 rounded-full shrink-0 border border-black/20 shadow-xs"
           style={{ backgroundColor: projectColor || 'var(--accent-main, #f97316)' }}
         />
         {effectivePath.map((seg, sIdx) => (
           <React.Fragment key={sIdx}>
             {sIdx > 0 && (
               <ChevronRight
-                className={`w-2.5 h-2.5 shrink-0 ${
-                  isLightBg ? 'text-black/40' : 'text-white/40'
-                }`}
+                className="w-2.5 h-2.5 shrink-0 text-slate-500"
               />
             )}
             <span
               className={
                 sIdx === 0
-                  ? isLightBg
-                    ? 'text-slate-950 font-bold truncate'
-                    : 'text-white font-bold truncate'
+                  ? 'text-slate-950 font-bold truncate'
                   : sIdx === effectivePath.length - 1
-                  ? isLightBg
-                    ? 'text-slate-900 font-medium truncate'
-                    : 'text-white/90 font-medium truncate'
-                  : isLightBg
-                  ? 'text-slate-700 truncate'
-                  : 'text-white/70 truncate'
+                  ? 'text-slate-800 font-semibold truncate'
+                  : 'text-slate-600 truncate'
               }
             >
               {seg}
@@ -286,28 +307,85 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
       </div>
 
       {/* Board Area: full height, horizontal scroll if screen cannot fit 4 columns, no vertical outer scroll */}
-      <div className="w-full flex-1 min-h-0 overflow-x-auto overflow-y-hidden pt-2.5 pb-2.5 md:pb-3">
+      <div className="w-full flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-1 pt-2 pb-2 md:pb-2.5">
         <div className="flex flex-row items-stretch gap-3 md:gap-4 h-full min-h-0 w-full min-w-fit">
         {columns.map((col) => {
           const colItems = flatItems.filter((f) => f.item.status === col.status);
           if (sortBy !== 'default') {
             colItems.sort((a, b) => compareItems(a.item, b.item, sortBy, sortDirection));
+          } else {
+            colItems.sort((a, b) => {
+              const orderA = a.item.kanbanOrder;
+              const orderB = b.item.kanbanOrder;
+              if (orderA !== undefined && orderB !== undefined) {
+                return orderA - orderB;
+              }
+              if (orderA !== undefined) return -1;
+              if (orderB !== undefined) return 1;
+              return 0;
+            });
           }
 
           return (
             <div
               key={col.status}
-              className="flex-1 min-w-[260px] sm:min-w-[270px] bg-[#121215] border border-[#27272a] rounded-lg p-3 flex flex-col h-full min-h-0 shrink-0"
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (dragOverColStatus !== col.status) {
+                  setDragOverColStatus(col.status);
+                }
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                setDragOverColStatus(col.status);
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  if (dragOverColStatus === col.status) {
+                    setDragOverColStatus(null);
+                    setDropTarget(null);
+                  }
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const droppedId = e.dataTransfer.getData('text/plain') || draggingItemId;
+                const currentDrop = dropTarget;
+                setDragOverColStatus(null);
+                setDropTarget(null);
+                setDraggingItemId(null);
+                if (!droppedId) return;
+
+                if (currentDrop && currentDrop.targetItemId) {
+                  if (onReorderOrMoveItem) {
+                    onReorderOrMoveItem(droppedId, currentDrop.targetItemId, currentDrop.position, col.status);
+                  } else {
+                    onUpdateItemStatus(droppedId, col.status);
+                  }
+                } else {
+                  if (onReorderOrMoveItem) {
+                    onReorderOrMoveItem(droppedId, null, 'after', col.status);
+                  } else {
+                    onUpdateItemStatus(droppedId, col.status);
+                  }
+                }
+              }}
+              className={`flex-1 min-w-[260px] sm:min-w-[270px] bg-[#121215] border rounded-lg p-3 flex flex-col h-full min-h-0 shrink-0 transition-all duration-150 ${
+                dragOverColStatus === col.status && !dropTarget
+                  ? 'border-orange-500 ring-2 ring-orange-500/50 ring-inset bg-[#16161d] [data-theme=light]:bg-slate-100/90 shadow-sm'
+                  : 'border-[#27272a]'
+              }`}
             >
               {/* Column Header */}
-              <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#27272a] px-1 shrink-0">
+              <div className="flex items-center justify-between pb-2 mb-2 px-1 shrink-0">
                 <div className="flex items-center gap-2">
                   <span
                     className="w-2.5 h-2.5 rounded-full"
                     style={{ backgroundColor: col.color }}
                   ></span>
-                  <span className="text-xs font-bold text-[#f4f4f5]">{col.title}</span>
-                  <span className="bg-[#27272a] text-[#a1a1aa] text-[10px] font-mono px-2 py-0.5 rounded-full">
+                  <span className="text-xs font-bold text-[#f4f4f5] [data-theme=light]:text-slate-800">{col.title}</span>
+                  <span className="bg-[#27272a] [data-theme=light]:bg-slate-200 text-[#a1a1aa] [data-theme=light]:text-slate-600 text-[10px] font-mono px-2 py-0.5 rounded-full">
                     {colItems.length}
                   </span>
                 </div>
@@ -329,25 +407,78 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                   const assignee = appData.persons.find((p) => p.id === item.assigneeId);
                   const reviewer = item.reviewerId ? appData.persons.find((p) => p.id === item.reviewerId) : null;
                   const cardStyle = getProjectCardStyle(project.color, isRunning);
-                  const fullBreadcrumb =
-                    parentPath && parentPath.length > 0
-                      ? parentPath.join(' > ')
-                      : project.title;
 
                   const statusCfg = getStatusConfig(item.status);
-                  const isLightBg = isLightColor(project.color);
 
                   return (
-                    <div
-                      key={item.id}
-                      style={cardStyle}
-                      onClick={() => onOpenEditItemModal(item)}
-                      className="border rounded-lg p-3.5 space-y-2.5 transition-all cursor-pointer group shadow-sm hover:brightness-105"
-                    >
+                    <React.Fragment key={item.id}>
+                      {/* Insertion line indicator above target item */}
+                      {dropTarget?.targetItemId === item.id && dropTarget.position === 'before' && draggingItemId !== item.id && (
+                        <div className="flex items-center gap-1.5 py-1 -my-1.5 z-20">
+                          <div className="w-2 h-2 rounded-full bg-orange-500 shadow-xs shrink-0" />
+                          <div className="h-1 flex-1 bg-gradient-to-r from-orange-500 via-amber-400 to-orange-500 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
+                          <div className="w-2 h-2 rounded-full bg-orange-500 shadow-xs shrink-0" />
+                        </div>
+                      )}
+
+                      <div
+                        draggable={true}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', item.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                          setDraggingItemId(item.id);
+                        }}
+                        onDragEnd={() => {
+                          setDraggingItemId(null);
+                          setDragOverColStatus(null);
+                          setDropTarget(null);
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          e.dataTransfer.dropEffect = 'move';
+                          if (!draggingItemId || draggingItemId === item.id) return;
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const offsetY = e.clientY - rect.top;
+                          const position: 'before' | 'after' = offsetY < rect.height / 2 ? 'before' : 'after';
+                          if (
+                            !dropTarget ||
+                            dropTarget.targetItemId !== item.id ||
+                            dropTarget.position !== position ||
+                            dropTarget.colStatus !== col.status
+                          ) {
+                            setDropTarget({ targetItemId: item.id, position, colStatus: col.status });
+                            setDragOverColStatus(col.status);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const droppedId = e.dataTransfer.getData('text/plain') || draggingItemId;
+                          const targetPos = dropTarget?.position || 'after';
+                          setDropTarget(null);
+                          setDragOverColStatus(null);
+                          setDraggingItemId(null);
+                          if (!droppedId) return;
+
+                          if (onReorderOrMoveItem) {
+                            onReorderOrMoveItem(droppedId, item.id, targetPos, col.status);
+                          } else {
+                            onUpdateItemStatus(droppedId, col.status);
+                          }
+                        }}
+                        style={cardStyle}
+                        onClick={() => onOpenEditItemModal(item)}
+                        className={`rounded-lg p-3.5 space-y-2.5 transition-all cursor-grab active:cursor-grabbing group hover:brightness-105 ${
+                          draggingItemId === item.id
+                            ? 'opacity-40 scale-[0.98] ring-2 ring-orange-500/50'
+                            : ''
+                        }`}
+                      >
                       {/* Top Header: Breadcrumb & More/Move Menu */}
                       <div className="flex items-start justify-between gap-2 min-w-0">
                         <div className="min-w-0 flex-1">
-                          {renderBreadcrumbs(parentPath, project.title, project.color, isLightBg)}
+                          {renderBreadcrumbs(parentPath, project.title, project.color)}
                         </div>
 
                         {/* Card Actions / Move Dropdown */}
@@ -362,11 +493,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                                   : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
                               );
                             }}
-                            className={`p-1 rounded-md transition-colors cursor-pointer ${
-                              isLightBg
-                                ? 'text-slate-700 hover:text-black hover:bg-black/10'
-                                : 'text-white/80 hover:text-white hover:bg-white/10'
-                            }`}
+                            className="p-1 rounded-md transition-colors cursor-pointer text-slate-700 hover:text-slate-950 hover:bg-black/10"
                             title="Task Actions & Move"
                           >
                             <MoreHorizontal className="w-3.5 h-3.5" />
@@ -419,13 +546,21 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                             )}
 
                             {/* Move Up */}
-                            {onReorderItem && (
+                            {(onReorderOrMoveItem || onReorderItem) && (
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  onReorderItem(item.id, 'up');
                                   setActiveTaskMenuAnchor(null);
+                                  if (onReorderOrMoveItem) {
+                                    const currentIdx = colItems.findIndex((ci) => ci.item.id === item.id);
+                                    if (currentIdx > 0) {
+                                      const prevItem = colItems[currentIdx - 1].item;
+                                      onReorderOrMoveItem(item.id, prevItem.id, 'before', col.status);
+                                    }
+                                  } else if (onReorderItem) {
+                                    onReorderItem(item.id, 'up');
+                                  }
                                 }}
                                 className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-[#f4f4f5] hover:bg-[#27272a] cursor-pointer text-left transition-colors"
                               >
@@ -435,13 +570,21 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                             )}
 
                             {/* Move Down */}
-                            {onReorderItem && (
+                            {(onReorderOrMoveItem || onReorderItem) && (
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  onReorderItem(item.id, 'down');
                                   setActiveTaskMenuAnchor(null);
+                                  if (onReorderOrMoveItem) {
+                                    const currentIdx = colItems.findIndex((ci) => ci.item.id === item.id);
+                                    if (currentIdx >= 0 && currentIdx < colItems.length - 1) {
+                                      const nextItem = colItems[currentIdx + 1].item;
+                                      onReorderOrMoveItem(item.id, nextItem.id, 'after', col.status);
+                                    }
+                                  } else if (onReorderItem) {
+                                    onReorderItem(item.id, 'down');
+                                  }
                                 }}
                                 className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-[#f4f4f5] hover:bg-[#27272a] cursor-pointer text-left transition-colors"
                               >
@@ -505,31 +648,19 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       <h4
                         className={`text-xs font-bold transition-colors line-clamp-2 flex items-center gap-1.5 no-underline ${
                           item.status === 'completed'
-                            ? isLightBg
-                              ? 'text-slate-600'
-                              : 'text-white/60'
-                            : isLightBg
-                            ? 'text-slate-950'
-                            : 'text-white'
+                            ? 'text-slate-400 line-through'
+                            : 'text-slate-950'
                         }`}
                       >
                         {item.status === 'completed' && (
-                          <Check
-                            className={`w-3.5 h-3.5 ${
-                              isLightBg ? 'text-slate-950' : 'text-emerald-300'
-                            } shrink-0`}
-                          />
+                          <Check className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5] shrink-0" />
                         )}
                         <span>{item.name}</span>
                       </h4>
 
                       {/* Notes snippet if present */}
                       {item.notes && (
-                        <p
-                          className={`text-[11px] line-clamp-2 no-underline ${
-                            isLightBg ? 'text-slate-800' : 'text-white/85'
-                          }`}
-                        >
+                        <p className="text-[11px] line-clamp-2 no-underline text-slate-700 font-normal">
                           {item.notes}
                         </p>
                       )}
@@ -537,19 +668,13 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       {/* Time Progress Bar */}
                       {estSecs > 0 && (
                         <div className="space-y-1">
-                          <div
-                            className={`flex justify-between text-[10px] font-mono ${
-                              isLightBg ? 'text-slate-800' : 'text-white/85'
-                            }`}
-                          >
+                          <div className="flex justify-between text-[10px] font-mono text-slate-700 font-medium">
                             <span>Logged: {formatDuration(loggedSecs)}</span>
                             <span>Target: {formatDuration(estSecs)}</span>
                           </div>
-                          <div className="w-full bg-black/20 h-1.5 rounded-full overflow-hidden border border-black/10">
+                          <div className="w-full bg-black/15 h-1.5 rounded-full overflow-hidden border border-black/10">
                             <div
-                              className={`h-full rounded-full transition-all ${
-                                isLightBg ? 'bg-slate-900' : 'bg-white'
-                              }`}
+                              className="h-full rounded-full transition-all bg-orange-600"
                               style={{
                                 width: `${Math.min(100, Math.round((loggedSecs / estSecs) * 100))}%`,
                               }}
@@ -559,26 +684,18 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       )}
 
                       {/* Card Footer: Assignee & Timer & Status Action */}
-                      <div
-                        className={`pt-2 border-t flex items-center justify-between ${
-                          isLightBg ? 'border-black/15' : 'border-white/15'
-                        }`}
-                      >
+                      <div className="pt-1 flex items-center justify-between">
                         {/* Assignee & Reviewer Avatar */}
                         <div className="flex items-center gap-1.5">
                           {assignee ? (
                             <img
                               src={assignee.avatar}
                               alt={assignee.name}
-                              className="w-5 h-5 rounded-full object-cover border border-[#3f3f46]"
+                              className="w-5 h-5 rounded-full object-cover border border-black/20"
                               title={`Penerima: ${assignee.name}`}
                             />
                           ) : (
-                            <User
-                              className={`w-4 h-4 ${
-                                isLightBg ? 'text-slate-700' : 'text-white/70'
-                              }`}
-                            />
+                            <User className="w-4 h-4 text-slate-600" />
                           )}
 
                           {reviewer && (
@@ -586,9 +703,9 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                               <img
                                 src={reviewer.avatar}
                                 alt={reviewer.name}
-                                className="w-5 h-5 rounded-full object-cover border border-amber-500/60 ring-1 ring-amber-500/30"
+                                className="w-5 h-5 rounded-full object-cover border border-amber-600/80 ring-1 ring-amber-500/40"
                               />
-                              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 border border-[#18181b]" />
+                              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500 border border-white" />
                             </div>
                           )}
                         </div>
@@ -601,7 +718,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                                 e.stopPropagation();
                                 onStopTimer();
                               }}
-                              className="bg-[#ef4444] text-white p-1 rounded-full text-[10px] flex items-center gap-1 px-2 font-mono shadow-sm cursor-pointer"
+                              className="bg-[#ef4444] text-white p-1 rounded-full text-[10px] flex items-center gap-1 px-2 font-mono shadow-sm cursor-pointer hover:bg-red-600 transition-colors"
                             >
                               <Square className="w-3 h-3 fill-current" /> Stop
                             </button>
@@ -611,14 +728,10 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                                 e.stopPropagation();
                                 onStartTimer(item.id);
                               }}
-                              className={`p-1.5 rounded-full transition-colors border cursor-pointer ${
-                                isLightBg
-                                  ? 'bg-black/10 hover:bg-black/20 text-slate-900 border-black/20'
-                                  : 'bg-white/15 hover:bg-white/25 text-white border-white/25'
-                              }`}
+                              className="p-1.5 rounded-full transition-all cursor-pointer bg-white hover:bg-zinc-100 text-black shadow-xs hover:scale-105 active:scale-95 flex items-center justify-center shrink-0"
                               title="Start Timer"
                             >
-                              <Play className="w-3 h-3 fill-current" />
+                              <Play className="w-3 h-3 fill-black text-black" />
                             </button>
                           )}
 
@@ -634,17 +747,13 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                                     : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
                                 );
                               }}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:opacity-85 border ${
-                                isLightBg
-                                  ? 'bg-black/10 text-slate-950 border-black/20'
-                                  : `${statusCfg.badgeBorder} ${statusCfg.badgeBg} ${statusCfg.textColor}`
-                              }`}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold cursor-pointer transition-all hover:bg-zinc-100 bg-white text-zinc-900 shadow-xs select-none border-0"
                               title="Click to change task status"
                             >
                               <span
                                 className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotBg}`}
                               />
-                              <span className="capitalize whitespace-nowrap">{statusCfg.label}</span>
+                              <span className="capitalize whitespace-nowrap text-zinc-900 font-medium">{statusCfg.label}</span>
                             </button>
 
                             {/* Status Dropdown Popover matching Notion View */}
@@ -682,10 +791,26 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                         </div>
                       </div>
                     </div>
-                  );
-                })}
 
-                {colItems.length === 0 && (
+                    {/* Insertion line indicator below target item */}
+                    {dropTarget?.targetItemId === item.id && dropTarget.position === 'after' && draggingItemId !== item.id && (
+                      <div className="flex items-center gap-1.5 py-1 -my-1.5 z-20">
+                        <div className="w-2 h-2 rounded-full bg-orange-500 shadow-xs shrink-0" />
+                        <div className="h-1 flex-1 bg-gradient-to-r from-orange-500 via-amber-400 to-orange-500 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
+                        <div className="w-2 h-2 rounded-full bg-orange-500 shadow-xs shrink-0" />
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+
+                {dragOverColStatus === col.status && draggingItemId && (
+                  <div className="border border-dashed border-orange-500/60 bg-orange-500/10 rounded-lg p-3 text-center text-xs font-semibold text-orange-400 select-none animate-pulse">
+                    Drop to set status to {col.title}
+                  </div>
+                )}
+
+                {colItems.length === 0 && (!dragOverColStatus || dragOverColStatus !== col.status) && (
                   <div className="text-center py-8 text-[#71717a] text-xs font-mono">
                     Empty column
                   </div>

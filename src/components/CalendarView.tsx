@@ -30,6 +30,23 @@ import {
 
 export type CalendarViewType = 'day' | 'week' | 'month' | 'year';
 
+// Helper to generate solid (opaque) 20% tint of a hex color blended onto white (#ffffff)
+const getSolid20PercentTint = (hex?: string): string => {
+  if (!hex || !hex.startsWith('#')) return '#f3f4f6';
+  const c = hex.replace('#', '');
+  if (c.length !== 6 && c.length !== 3) return '#f3f4f6';
+  const full = c.length === 3 ? c.split('').map((x) => x + x).join('') : c;
+  const r = parseInt(full.substring(0, 2), 16);
+  const g = parseInt(full.substring(2, 4), 16);
+  const b = parseInt(full.substring(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return '#f3f4f6';
+  // 20% color + 80% white (solid tint, no alpha transparency)
+  const r20 = Math.round(r * 0.2 + 255 * 0.8);
+  const g20 = Math.round(g * 0.2 + 255 * 0.8);
+  const b20 = Math.round(b * 0.2 + 255 * 0.8);
+  return `rgb(${r20}, ${g20}, ${b20})`;
+};
+
 // Contrast helper to ensure text on dynamic project color backgrounds is always WCAG legible
 const isLightColor = (hex?: string): boolean => {
   if (!hex || !hex.startsWith('#')) return false;
@@ -1054,7 +1071,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     const dayHeadersShort = showWeekends ? DAYS_OF_WEEK_SHORT : DAYS_OF_WEEK_SHORT.slice(0, 5);
     const dayHeadersMon = showWeekends ? DAYS_OF_WEEK_MON : DAYS_OF_WEEK_MON.slice(0, 5);
 
-    // Helper to render task card in Month View (border-free)
+    // Helper to render task card in Month View (border-free, 20% solid tint, dark text & objects)
     const renderMonthTaskCard = (task: MonthDayTask, extraClass = '') => {
       const isCompleted = task.status === 'completed';
       const statusConfig = getStatusConfig(task.status);
@@ -1067,8 +1084,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         .filter(Boolean)
         .join(' ');
 
-      const isLightBg = isLightColor(task.color);
-
       return (
         <div
           key={task.id}
@@ -1077,20 +1092,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             if (onOpenEditItemModal) onOpenEditItemModal(task.item);
           }}
           style={{
-            backgroundColor: task.color,
+            backgroundColor: getSolid20PercentTint(task.color),
           }}
-          className={`px-1.5 py-0.5 sm:py-1 rounded text-[10.5px] sm:text-[11px] font-medium leading-tight truncate cursor-pointer hover:brightness-110 transition-all flex items-center justify-between gap-1 group/card select-none shrink-0 shadow-xs ${
-            isLightBg ? 'text-slate-950 font-semibold' : 'text-white'
-          } ${extraClass}`}
+          className={`px-1.5 py-0.5 sm:py-1 rounded text-[10.5px] sm:text-[11px] font-semibold leading-tight truncate cursor-pointer hover:brightness-95 transition-all flex items-center justify-between gap-1 group/card select-none shrink-0 shadow-xs text-slate-950 ${extraClass}`}
           title={fullTooltip}
         >
           <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate">
             {isCompleted ? (
-              <Check className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${isLightBg ? 'text-slate-950' : 'text-emerald-300'} shrink-0`} />
+              <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-950 shrink-0 stroke-[2.5]" />
             ) : (
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isLightBg ? 'bg-black/70' : 'bg-white/80'}`} />
+              <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-slate-900" />
             )}
-            <span className="truncate">
+            <span className="truncate text-slate-950">
               {task.title}
             </span>
           </div>
@@ -1290,29 +1303,23 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         key={ev.id}
                         onClick={() => onOpenEditItemModal && onOpenEditItemModal(ev.item)}
                         style={{
-                          backgroundColor: ev.color,
+                          backgroundColor: getSolid20PercentTint(ev.color),
                         }}
-                        className={`px-2 py-1 rounded text-[11px] font-semibold truncate cursor-pointer hover:brightness-110 transition-all flex items-center justify-between gap-1 shadow-xs ${
-                          isLightBg ? 'text-slate-950' : 'text-white'
-                        }`}
+                        className="px-2 py-1 rounded text-[11px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all flex items-center justify-between gap-1 shadow-xs text-slate-950"
                         title={`${ev.title} (${ev.project.title})${durationText ? ` • ${durationText}` : ''}${ev.sessionCount && ev.sessionCount > 1 ? ` • ${ev.sessionCount} sessions` : ''} • Status: ${statusConfig.label}`}
                       >
                         <div className="flex items-center gap-1 min-w-0 truncate">
-                          <span className="truncate">{ev.title}</span>
+                          <span className="truncate text-slate-950">{ev.title}</span>
                           {ev.sessionCount && ev.sessionCount > 1 && (
-                            <span className={`text-[9px] px-1 py-0.2 rounded font-sans shrink-0 ${
-                              isLightBg
-                                ? 'bg-black/15 text-slate-900 border border-black/20'
-                                : 'bg-white/20 text-white border border-white/30'
-                            }`}>
+                            <span className="text-[9px] px-1 py-0.2 rounded font-sans shrink-0 bg-black/10 text-slate-900 border border-black/15 font-semibold">
                               {ev.sessionCount} sess
                             </span>
                           )}
                         </div>
                         {isCompleted ? (
-                          <Check className={`w-3 h-3 ${isLightBg ? 'text-slate-950' : 'text-emerald-300'} shrink-0`} />
+                          <Check className="w-3 h-3 text-slate-950 shrink-0 stroke-[2.5]" />
                         ) : (
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isLightBg ? 'bg-black/70' : 'bg-white/80'}`} />
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-slate-900" />
                         )}
                       </div>
                     );
@@ -1406,8 +1413,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     const timeWithDur = timeRangeStr
                       ? (durationText ? `${timeRangeStr} (${durationText})` : timeRangeStr)
                       : (durationText ? `(${durationText})` : '');
-                    const isLightBg = isLightColor(ev.color);
-
                     return (
                       <div
                         key={ev.id}
@@ -1418,39 +1423,31 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         style={{
                           top: `${topPx}px`,
                           height: `${heightPx}px`,
-                          backgroundColor: ev.color,
+                          backgroundColor: getSolid20PercentTint(ev.color),
                         }}
-                        className={`absolute inset-x-1 rounded-lg p-1.5 text-xs shadow-lg cursor-pointer hover:brightness-110 transition-all overflow-hidden z-10 flex flex-col justify-between group/card select-none ${
-                          isLightBg ? 'text-slate-950' : 'text-white'
-                        }`}
+                        className="absolute inset-x-1 rounded-lg p-1.5 text-xs shadow-md cursor-pointer hover:brightness-95 transition-all overflow-hidden z-10 flex flex-col justify-between group/card select-none text-slate-950"
                         title={`${ev.title}${timeWithDur ? ` | ${timeWithDur}` : ''} • ${ev.project.title} • Status: ${statusConfig.label}${ev.sessionCount && ev.sessionCount > 1 ? ` • ${ev.sessionCount} sessions consolidated` : ''}`}
                       >
                         <div className="flex items-start justify-between gap-1 min-w-0 relative z-10">
-                          <span className="font-semibold truncate text-[11px] leading-tight">
+                          <span className="font-semibold truncate text-[11px] leading-tight text-slate-950">
                             {ev.title}
                           </span>
                           {isCompleted ? (
-                            <CheckCircle2 className={`w-3.5 h-3.5 ${isLightBg ? 'text-slate-950' : 'text-emerald-300'} shrink-0`} />
+                            <CheckCircle2 className="w-3.5 h-3.5 text-slate-950 shrink-0" />
                           ) : (
                             <span
-                              className={`w-2 h-2 rounded-full shrink-0 mt-0.5 shadow-xs ${isLightBg ? 'bg-black/70' : 'bg-white/80'}`}
+                              className="w-2 h-2 rounded-full shrink-0 mt-0.5 shadow-xs bg-slate-900"
                               title={`Status: ${statusConfig.label}`}
                             />
                           )}
                         </div>
 
-                        <div className={`flex items-center justify-between text-[10px] font-mono mt-0.5 relative z-10 leading-none ${
-                          isLightBg ? 'text-slate-800' : 'text-white/80'
-                        }`}>
-                          <span className="truncate">
+                        <div className="flex items-center justify-between text-[10px] font-mono mt-0.5 relative z-10 leading-none text-slate-800">
+                          <span className="truncate font-semibold">
                             {timeWithDur || formatDuration(ev.durationSeconds)}
                           </span>
                           {ev.isSession && (
-                            <span className={`text-[9px] px-1 py-0.2 rounded font-sans shrink-0 ml-1 ${
-                              isLightBg
-                                ? 'bg-black/15 text-slate-900 border border-black/20'
-                                : 'bg-white/20 text-white border border-white/30'
-                            }`}>
+                            <span className="text-[9px] px-1 py-0.2 rounded font-sans shrink-0 ml-1 bg-black/10 text-slate-900 border border-black/15 font-semibold">
                               {ev.sessionCount && ev.sessionCount > 1 ? `${ev.sessionCount} sess` : 'Log'}
                             </span>
                           )}
@@ -1659,8 +1656,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   .filter(Boolean)
                   .join(' ');
 
-                const isLightBg = isLightColor(task.color);
-
                 return (
                   <div
                     key={task.id}
@@ -1669,48 +1664,42 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       if (onOpenEditItemModal) onOpenEditItemModal(task.item);
                     }}
                     style={{
-                      backgroundColor: task.color,
+                      backgroundColor: getSolid20PercentTint(task.color),
                     }}
-                    className={`px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer hover:brightness-110 transition-all flex items-center justify-between gap-2 shadow-xs ${
-                      isLightBg ? 'text-slate-950 font-semibold' : 'text-white'
-                    }`}
+                    className="px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer hover:brightness-95 transition-all flex items-center justify-between gap-2 shadow-xs text-slate-950"
                     title={fullTooltip}
                   >
                     <div className="flex flex-col min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold">
+                        <span className="font-semibold text-slate-950">
                           {task.title}
                         </span>
                         {timeDurationPart && (
                           <>
-                            <span className={`font-mono text-[11px] ${isLightBg ? 'text-black/40' : 'text-white/40'}`}>|</span>
-                            <span className={`font-mono text-[11px] font-bold ${isLightBg ? 'text-slate-900' : 'text-white'}`}>
+                            <span className="font-mono text-[11px] text-slate-500">|</span>
+                            <span className="font-mono text-[11px] font-bold text-slate-900">
                               {timeDurationPart}
                             </span>
                           </>
                         )}
-                        <span className={`${isLightBg ? 'text-black/40' : 'text-white/40'}`}>•</span>
-                        <span className={`text-[11px] ${isLightBg ? 'text-slate-800' : 'text-white/80'}`}>{task.project.title}</span>
-                        <span className={`${isLightBg ? 'text-black/40' : 'text-white/40'}`}>•</span>
-                        <span className="flex items-center gap-1">
-                          <span className={`w-1.5 h-1.5 rounded-full ${isLightBg ? 'bg-black/70' : 'bg-white/80'}`} />
-                          <span className={`${isLightBg ? 'text-slate-900' : 'text-white/90'}`}>{statusConfig.label}</span>
+                        <span className="text-slate-500">•</span>
+                        <span className="text-[11px] text-slate-800 font-medium">{task.project.title}</span>
+                        <span className="text-slate-500">•</span>
+                        <span className="flex items-center gap-1 text-slate-900 font-medium">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+                          <span>{statusConfig.label}</span>
                         </span>
                         {task.sessionCount > 1 && (
-                          <span className={`px-1 py-0.2 rounded text-[9px] font-sans ${
-                            isLightBg
-                              ? 'bg-black/15 text-slate-950 border border-black/20'
-                              : 'bg-white/20 text-white border border-white/30'
-                          }`}>
+                          <span className="px-1 py-0.2 rounded text-[9px] font-sans bg-black/10 text-slate-950 border border-black/20 font-semibold">
                             {task.sessionCount} sessions
                           </span>
                         )}
                       </div>
                     </div>
                     {isCompleted ? (
-                      <Check className={`w-3.5 h-3.5 ${isLightBg ? 'text-slate-950' : 'text-emerald-300'} shrink-0`} />
+                      <Check className="w-3.5 h-3.5 text-slate-950 shrink-0 stroke-[2.5]" />
                     ) : (
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${isLightBg ? 'bg-black/70' : 'bg-white/80'}`} />
+                      <span className="w-2 h-2 rounded-full shrink-0 bg-slate-900" />
                     )}
                   </div>
                 );

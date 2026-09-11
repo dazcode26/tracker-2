@@ -41,6 +41,7 @@ export interface ItemNode {
   icon?: string;
   sessions: Session[];
   showInSummary?: boolean;
+  kanbanOrder?: number;
   subItems: ItemNode[];
 }
 

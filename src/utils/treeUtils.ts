@@ -430,6 +430,258 @@ function reorderInSubItemsRecursive(
 }
 
 /**
+ * Recursively update all items in all projects with a transformation function.
+ * Preserves the exact project and parent-child hierarchy.
+ */
+export function updateAllItemsInProjects(
+  projects: ProjectNode[],
+  updateFn: (item: ItemNode) => ItemNode
+): ProjectNode[] {
+  const mapItems = (items: ItemNode[]): ItemNode[] => {
+    return items.map((item) => {
+      const updated = updateFn(item);
+      if (updated.subItems && updated.subItems.length > 0) {
+        return {
+          ...updated,
+          subItems: mapItems(updated.subItems),
+        };
+      }
+      return updated;
+    });
+  };
+
+  return projects.map((project) => ({
+    ...project,
+    items: mapItems(project.items),
+  }));
+}
+
+/**
+ * Reorders an item in Kanban view without changing its parent project or parent item hierarchy (Option A).
+ * Assigns or updates kanbanOrder so items in the target status column are ordered as intended.
+ * If newStatus is provided, updates the item's status.
+ */
+export function reorderKanbanItemInProjects(
+  projects: ProjectNode[],
+  sourceItemId: string,
+  targetItemId: string | null,
+  position: 'before' | 'after' = 'after',
+  newStatus?: ItemStatus
+): ProjectNode[] {
+  if (!sourceItemId) return projects;
+
+  const sourceLoc = findItemAndProject(projects, sourceItemId);
+  if (!sourceLoc) return projects;
+
+  const effectiveStatus: ItemStatus = newStatus || sourceLoc.item.status;
+
+  // 1. Collect all leaf items across all active projects
+  const allLeafs = getLeafFlatItems(projects);
+
+  // 2. Filter leaf items that belong to the target column/status
+  // Include the source item even if it was previously in another status
+  const targetColLeafs = allLeafs.filter((leaf) => {
+    if (leaf.item.id === sourceItemId) return true;
+    return leaf.item.status === effectiveStatus;
+  });
+
+  // 3. Sort targetColLeafs by existing kanbanOrder, preserving stable index as fallback
+  const sortedTargetCol = targetColLeafs
+    .map((leaf, originalIndex) => ({ leaf, originalIndex }))
+    .sort((a, b) => {
+      const orderA = a.leaf.item.kanbanOrder;
+      const orderB = b.leaf.item.kanbanOrder;
+      if (orderA !== undefined && orderB !== undefined) {
+        if (orderA !== orderB) return orderA - orderB;
+      } else if (orderA !== undefined) {
+        return -1;
+      } else if (orderB !== undefined) {
+        return 1;
+      }
+      return a.originalIndex - b.originalIndex;
+    })
+    .map((x) => x.leaf.item);
+
+  // 4. Remove source item from the sorted list
+  const withoutSource = sortedTargetCol.filter((it) => it.id !== sourceItemId);
+
+  // 5. Insert source item at the target position
+  const sourceItemWithNewStatus: ItemNode = {
+    ...sourceLoc.item,
+    status: effectiveStatus,
+  };
+
+  let reorderedList: ItemNode[] = [];
+  if (targetItemId && targetItemId !== sourceItemId) {
+    const targetIdx = withoutSource.findIndex((it) => it.id === targetItemId);
+    if (targetIdx !== -1) {
+      const insertIdx = position === 'before' ? targetIdx : targetIdx + 1;
+      reorderedList = [
+        ...withoutSource.slice(0, insertIdx),
+        sourceItemWithNewStatus,
+        ...withoutSource.slice(insertIdx),
+      ];
+    } else {
+      reorderedList = [...withoutSource, sourceItemWithNewStatus];
+    }
+  } else {
+    // Dropped onto empty column area or no target item
+    if (position === 'before') {
+      reorderedList = [sourceItemWithNewStatus, ...withoutSource];
+    } else {
+      reorderedList = [...withoutSource, sourceItemWithNewStatus];
+    }
+  }
+
+  // 6. Build map of new kanbanOrder: itemId -> number
+  const kanbanOrderMap = new Map<string, number>();
+  reorderedList.forEach((it, idx) => {
+    kanbanOrderMap.set(it.id, (idx + 1) * 1000);
+  });
+
+  // 7. Update all projects without altering tree/project structure.
+  // Each item in projects preserves its exact parent and project, only status & kanbanOrder are updated.
+  return updateAllItemsInProjects(projects, (it) => {
+    let updated = it;
+    if (it.id === sourceItemId && it.status !== effectiveStatus) {
+      updated = { ...updated, status: effectiveStatus };
+    }
+    if (kanbanOrderMap.has(it.id)) {
+      const newOrder = kanbanOrderMap.get(it.id)!;
+      if (updated.kanbanOrder !== newOrder) {
+        updated = { ...updated, kanbanOrder: newOrder };
+      }
+    }
+    return updated;
+  });
+}
+
+/**
+ * Move and reorder an item to a specific position relative to a target item,
+ * optionally updating its status (e.g. during Kanban drag and drop).
+ */
+export function moveAndReorderItemInProjects(
+  projects: ProjectNode[],
+  sourceItemId: string,
+  targetItemId: string | null,
+  position: 'before' | 'after' = 'after',
+  newStatus?: ItemStatus
+): ProjectNode[] {
+  if (!sourceItemId) return projects;
+  if (sourceItemId === targetItemId) {
+    if (newStatus) {
+      return updateItemInProjects(projects, sourceItemId, (it) => ({
+        ...it,
+        status: newStatus,
+      }));
+    }
+    return projects;
+  }
+
+  const sourceLoc = findItemAndProject(projects, sourceItemId);
+  if (!sourceLoc) return projects;
+
+  let itemToMove: ItemNode = { ...sourceLoc.item };
+  if (newStatus) {
+    itemToMove = {
+      ...itemToMove,
+      status: newStatus,
+    };
+  }
+
+  // 1. Remove source item from projects
+  const projectsWithoutSource = deleteItemFromProjects(projects, sourceItemId);
+
+  // If no target item (e.g. dropped onto column container or empty column)
+  if (!targetItemId) {
+    const targetProjId = sourceLoc.project.id;
+    const targetParentId = sourceLoc.parent ? sourceLoc.parent.id : 'root';
+    return projectsWithoutSource.map((proj) => {
+      if (proj.id !== targetProjId) return proj;
+      if (targetParentId === 'root') {
+        return {
+          ...proj,
+          items: [...proj.items, itemToMove],
+        };
+      } else {
+        return {
+          ...proj,
+          items: addSubItemRecursive(proj.items, targetParentId, itemToMove),
+        };
+      }
+    });
+  }
+
+  // 2. Find target location in the updated structure
+  const targetLoc = findItemAndProject(projectsWithoutSource, targetItemId);
+  if (!targetLoc) {
+    // Fallback: append to source project
+    return projectsWithoutSource.map((proj) => {
+      if (proj.id === sourceLoc.project.id) {
+        return { ...proj, items: [...proj.items, itemToMove] };
+      }
+      return proj;
+    });
+  }
+
+  const targetProjId = targetLoc.project.id;
+  const targetParent = targetLoc.parent;
+
+  return projectsWithoutSource.map((proj) => {
+    if (proj.id !== targetProjId) return proj;
+
+    if (!targetParent) {
+      // Root level in target project
+      const idx = proj.items.findIndex((it) => it.id === targetItemId);
+      if (idx === -1) {
+        return { ...proj, items: [...proj.items, itemToMove] };
+      }
+      const insertIdx = position === 'before' ? idx : idx + 1;
+      const newItems = [...proj.items];
+      newItems.splice(insertIdx, 0, itemToMove);
+      return { ...proj, items: newItems };
+    } else {
+      // Inside a parent's subItems
+      return {
+        ...proj,
+        items: insertSubItemAtTarget(proj.items, targetParent.id, targetItemId, itemToMove, position),
+      };
+    }
+  });
+}
+
+function insertSubItemAtTarget(
+  items: ItemNode[],
+  parentId: string,
+  targetItemId: string,
+  itemToInsert: ItemNode,
+  position: 'before' | 'after'
+): ItemNode[] {
+  return items.map((item) => {
+    if (item.id === parentId) {
+      const sub = item.subItems || [];
+      const idx = sub.findIndex((s) => s.id === targetItemId);
+      if (idx === -1) {
+        return { ...item, subItems: [...sub, itemToInsert] };
+      }
+      const insertIdx = position === 'before' ? idx : idx + 1;
+      const newSub = [...sub];
+      newSub.splice(insertIdx, 0, itemToInsert);
+      return { ...item, subItems: newSub };
+    }
+
+    if (item.subItems && item.subItems.length > 0) {
+      return {
+        ...item,
+        subItems: insertSubItemAtTarget(item.subItems, parentId, targetItemId, itemToInsert, position),
+      };
+    }
+
+    return item;
+  });
+}
+
+/**
  * Recursively clone an ItemNode and all its subItems.
  * All variables except name are reset to clean defaults:
  * - name: "${orig.name} (Copy)" for the top cloned task, and orig.name for descendant sub-tasks
