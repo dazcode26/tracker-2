@@ -62,17 +62,6 @@ export const DEFAULT_TREE_COLUMNS: Record<string, boolean> = {
   actions: true,
 };
 
-export const DEFAULT_TREE_WIDTHS: Record<string, number> = {
-  name: 300,
-  status: 140,
-  progress: 110,
-  date: 190,
-  assignee: 130,
-  reviewer: 130,
-  timer: 130,
-  actions: 55,
-};
-
 // Calculate item progress and roll-up for parent nodes
 function calculateItemProgress(item: ItemNode): { total: number; completed: number; percentage: number; isLeaf: boolean } {
   if (!item.subItems || item.subItems.length === 0) {
@@ -182,65 +171,12 @@ export const TreeView: React.FC<TreeViewProps> = ({
   const [activeAssigneeAnchor, setActiveAssigneeAnchor] = useState<MenuAnchorState | null>(null);
   const [activeReviewerAnchor, setActiveReviewerAnchor] = useState<MenuAnchorState | null>(null);
 
-  // Column width resizing state persisted to localStorage
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+  // Clear any legacy custom column widths from localStorage
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem('tracker_tree_column_widths');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return { ...DEFAULT_TREE_WIDTHS, ...parsed };
-      }
+      localStorage.removeItem('tracker_tree_column_widths');
     } catch {}
-    return { ...DEFAULT_TREE_WIDTHS };
-  });
-
-  const resizingRef = useRef<{ colKey: string; startX: number; startWidth: number } | null>(null);
-
-  const handleStartResize = (arg1: string | React.MouseEvent, arg2?: string | React.MouseEvent) => {
-    const e = (typeof arg1 === 'object' && arg1 && 'clientX' in arg1 ? arg1 : arg2) as React.MouseEvent | undefined;
-    const colKey = (typeof arg1 === 'string' ? arg1 : arg2) as string;
-
-    if (!colKey) return;
-
-    if (e && typeof e.preventDefault === 'function') {
-      e.preventDefault();
-    }
-    if (e && typeof e.stopPropagation === 'function') {
-      e.stopPropagation();
-    }
-    const startX = e && typeof e.clientX === 'number' ? e.clientX : 0;
-    const startWidth = columnWidths[colKey] || DEFAULT_TREE_WIDTHS[colKey] || 100;
-    resizingRef.current = { colKey, startX, startWidth };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const current = resizingRef.current;
-      if (!current) return;
-      const { colKey: activeColKey, startX: activeStartX, startWidth: activeStartWidth } = current;
-      const delta = moveEvent.clientX - activeStartX;
-      const newWidth = Math.max(45, activeStartWidth + delta);
-      setColumnWidths((prev) => ({
-        ...prev,
-        [activeColKey]: newWidth,
-      }));
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      if (resizingRef.current) {
-        resizingRef.current = null;
-        setColumnWidths((latest) => {
-          try {
-            localStorage.setItem('tracker_tree_column_widths', JSON.stringify(latest));
-          } catch {}
-          return latest;
-        });
-      }
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
+  }, []);
 
   const handleSetItemEmoji = (itemId: string, emoji: string) => {
     if (onSaveData) {
@@ -466,8 +402,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
     depth: number,
     isFirstChild: boolean,
     isLastChild: boolean,
-    parentExpanded: boolean = true,
-    colSettings: Record<string, boolean> = DEFAULT_TREE_COLUMNS
+    parentExpanded: boolean = true
   ) => {
     if (!parentExpanded) return null;
     if (searchQuery && !matchesSearch(item)) return null;
@@ -505,8 +440,6 @@ export const TreeView: React.FC<TreeViewProps> = ({
           <div
             className="flex items-center py-2 pr-2 xl:pr-4 relative shrink-0 flex-1 min-w-[200px]"
             style={{
-              width: `${columnWidths.name || DEFAULT_TREE_WIDTHS.name}px`,
-              minWidth: `${columnWidths.name || DEFAULT_TREE_WIDTHS.name}px`,
               paddingLeft: `${Math.max(4, depth * 22 + 6)}px`,
             }}
           >
@@ -633,15 +566,10 @@ export const TreeView: React.FC<TreeViewProps> = ({
           </div>
 
           {/* Column 2: STATUS */}
-          {colSettings.status !== false && (
-            <div
-              style={{
-                width: `${columnWidths.status || DEFAULT_TREE_WIDTHS.status}px`,
-                minWidth: `${columnWidths.status || DEFAULT_TREE_WIDTHS.status}px`,
-              }}
-              className="px-2 xl:px-3 shrink-0 relative"
-              data-popover-root
-            >
+          <div
+            className="w-[140px] min-w-[140px] px-2 xl:px-3 shrink-0 relative"
+            data-popover-root
+          >
               <button
                 type="button"
                 onClick={(e) => {
@@ -688,18 +616,12 @@ export const TreeView: React.FC<TreeViewProps> = ({
                 })}
               </PortalMenu>
             </div>
-          )}
 
           {/* Column 3: PROGRESS */}
-          {colSettings.progress !== false && (
-            <div
-              style={{
-                width: `${columnWidths.progress || DEFAULT_TREE_WIDTHS.progress}px`,
-                minWidth: `${columnWidths.progress || DEFAULT_TREE_WIDTHS.progress}px`,
-              }}
-              className="px-2 xl:px-3 shrink-0 relative"
-              data-popover-root
-            >
+          <div
+            className="w-[110px] min-w-[110px] px-2 xl:px-3 shrink-0 relative"
+            data-popover-root
+          >
               <button
                 type="button"
                 onClick={(e) => {
@@ -783,19 +705,13 @@ export const TreeView: React.FC<TreeViewProps> = ({
                 </PortalMenu>
               )}
             </div>
-          )}
 
           {/* Column 4: DATE */}
-          {colSettings.date !== false && (
-            <div
-              onClick={() => onOpenEditItemModal(item)}
-              style={{
-                width: `${columnWidths.date || DEFAULT_TREE_WIDTHS.date}px`,
-                minWidth: `${columnWidths.date || DEFAULT_TREE_WIDTHS.date}px`,
-              }}
-              className="px-2 xl:px-4 shrink-0 font-mono text-[11px] cursor-pointer hover:bg-[#27272a]/50 rounded py-1 transition-colors flex flex-col justify-center min-w-0"
-              title={`Realization: ${dateRangeStr || 'None'}\nTarget: ${dateInfo.fullDate}\nClick to edit details`}
-            >
+          <div
+            onClick={() => onOpenEditItemModal(item)}
+            className="w-[190px] min-w-[190px] px-2 xl:px-4 shrink-0 font-mono text-[11px] cursor-pointer hover:bg-[#27272a]/50 rounded py-1 transition-colors flex flex-col justify-center min-w-0"
+            title={`Realization: ${dateRangeStr || 'None'}\nTarget: ${dateInfo.fullDate}\nClick to edit details`}
+          >
               {dateRangeStr ? (
                 <span className="text-[#71717a] font-mono whitespace-nowrap truncate">{dateRangeStr}</span>
               ) : (
@@ -815,185 +731,161 @@ export const TreeView: React.FC<TreeViewProps> = ({
                 </span>
               )}
             </div>
-          )}
 
-          {/* Column 5: ASSIGNEE */}
-          {colSettings.assignee !== false && (
-            <div
-              style={{
-                width: `${columnWidths.assignee || DEFAULT_TREE_WIDTHS.assignee}px`,
-                minWidth: `${columnWidths.assignee || DEFAULT_TREE_WIDTHS.assignee}px`,
+          {/* Column 5: ASSIGNEE (A) */}
+          <div
+            className="w-[48px] min-w-[48px] px-1 shrink-0 flex items-center justify-center relative"
+            data-popover-root
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveAssigneeAnchor(
+                  activeAssigneeAnchor?.id === item.id
+                    ? null
+                    : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                );
               }}
-              className="px-2 xl:px-3 shrink-0 flex items-center relative"
-              data-popover-root
+              className="flex items-center justify-center hover:opacity-85 p-0.5 rounded cursor-pointer transition-all"
+              title={assignee ? `Assignee: ${assignee.name} (Click to change)` : 'Unassigned (Click to assign)'}
             >
+              {assignee ? (
+                <img
+                  src={assignee.avatar}
+                  alt={assignee.name}
+                  className="w-6 h-6 rounded-full object-cover border border-[#27272a] ring-1 ring-white/10 shrink-0"
+                />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-[#27272a] border border-[#3f3f46] flex items-center justify-center text-[#71717a] hover:text-[#f4f4f5] transition-colors shrink-0">
+                  <User className="w-3.5 h-3.5" />
+                </div>
+              )}
+            </button>
+
+            <PortalMenu
+              isOpen={activeAssigneeAnchor?.id === item.id}
+              onClose={() => setActiveAssigneeAnchor(null)}
+              anchorRect={activeAssigneeAnchor?.id === item.id ? activeAssigneeAnchor.rect : null}
+              triggerElement={activeAssigneeAnchor?.id === item.id ? activeAssigneeAnchor.el : null}
+              align="left"
+              className="w-48 flex flex-col gap-0.5"
+            >
+              <div className="px-2 py-1 text-[10px] uppercase font-bold text-[#71717a]">
+                Assign Team Member
+              </div>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveAssigneeAnchor(
-                    activeAssigneeAnchor?.id === item.id
-                      ? null
-                      : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
-                  );
+                onClick={() => {
+                  handleSetAssignee(item.id, null);
+                  setActiveAssigneeAnchor(null);
                 }}
-                className="flex items-center gap-1.5 hover:opacity-85 p-0.5 rounded cursor-pointer transition-all max-w-full truncate"
-                title={assignee ? `Assignee: ${assignee.name} (Click to change)` : 'Unassigned (Click to assign)'}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#71717a] hover:text-[#f4f4f5] cursor-pointer text-left transition-colors"
               >
-                {assignee ? (
-                  <>
-                    <img
-                      src={assignee.avatar}
-                      alt={assignee.name}
-                      className="w-5 h-5 rounded-full object-cover border border-[#27272a] ring-1 ring-white/10 shrink-0"
-                    />
-                    <span className="text-xs text-[#d4d4d8] truncate hidden sm:inline">{assignee.name}</span>
-                  </>
-                ) : (
-                  <div className="w-5 h-5 rounded-full bg-[#27272a] border border-[#3f3f46] flex items-center justify-center text-[#71717a] hover:text-[#f4f4f5] transition-colors shrink-0">
-                    <User className="w-3 h-3" />
-                  </div>
-                )}
+                <User className="w-4 h-4" />
+                <span>Unassigned</span>
               </button>
-
-              <PortalMenu
-                isOpen={activeAssigneeAnchor?.id === item.id}
-                onClose={() => setActiveAssigneeAnchor(null)}
-                anchorRect={activeAssigneeAnchor?.id === item.id ? activeAssigneeAnchor.rect : null}
-                triggerElement={activeAssigneeAnchor?.id === item.id ? activeAssigneeAnchor.el : null}
-                align="left"
-                className="w-48 flex flex-col gap-0.5"
-              >
-                <div className="px-2 py-1 text-[10px] uppercase font-bold text-[#71717a]">
-                  Assign Team Member
-                </div>
+              {(appData.persons || []).map((person) => (
                 <button
+                  key={person.id}
                   type="button"
                   onClick={() => {
-                    handleSetAssignee(item.id, null);
+                    handleSetAssignee(item.id, person.id);
                     setActiveAssigneeAnchor(null);
                   }}
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#71717a] hover:text-[#f4f4f5] cursor-pointer text-left transition-colors"
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
+                    item.assigneeId === person.id ? 'font-semibold bg-[#27272a]' : ''
+                  }`}
                 >
-                  <User className="w-4 h-4" />
-                  <span>Unassigned</span>
+                  <img src={person.avatar} alt={person.name} className="w-5 h-5 rounded-full object-cover" />
+                  <div className="flex-1 truncate">
+                    <div className="truncate">{person.name}</div>
+                    <div className="text-[10px] text-[#71717a] truncate">{person.role}</div>
+                  </div>
                 </button>
-                {(appData.persons || []).map((person) => (
-                  <button
-                    key={person.id}
-                    type="button"
-                    onClick={() => {
-                      handleSetAssignee(item.id, person.id);
-                      setActiveAssigneeAnchor(null);
-                    }}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
-                      item.assigneeId === person.id ? 'font-semibold bg-[#27272a]' : ''
-                    }`}
-                  >
-                    <img src={person.avatar} alt={person.name} className="w-5 h-5 rounded-full object-cover" />
-                    <div className="flex-1 truncate">
-                      <div className="truncate">{person.name}</div>
-                      <div className="text-[10px] text-[#71717a] truncate">{person.role}</div>
-                    </div>
-                  </button>
-                ))}
-              </PortalMenu>
-            </div>
-          )}
+              ))}
+            </PortalMenu>
+          </div>
 
-          {/* Column 6: REVIEWER */}
-          {colSettings.reviewer !== false && (
-            <div
-              style={{
-                width: `${columnWidths.reviewer || DEFAULT_TREE_WIDTHS.reviewer}px`,
-                minWidth: `${columnWidths.reviewer || DEFAULT_TREE_WIDTHS.reviewer}px`,
+          {/* Column 6: REVIEWER (R) */}
+          <div
+            className="w-[48px] min-w-[48px] px-1 shrink-0 flex items-center justify-center relative"
+            data-popover-root
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveReviewerAnchor(
+                  activeReviewerAnchor?.id === item.id
+                    ? null
+                    : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                );
               }}
-              className="px-2 xl:px-3 shrink-0 flex items-center relative"
-              data-popover-root
+              className="flex items-center justify-center hover:opacity-85 p-0.5 rounded cursor-pointer transition-all"
+              title={reviewer ? `Reviewer: ${reviewer.name} (Click to change)` : 'No Reviewer (Click to assign)'}
             >
+              {reviewer ? (
+                <img
+                  src={reviewer.avatar}
+                  alt={`Reviewer: ${reviewer.name}`}
+                  className="w-6 h-6 rounded-full object-cover border border-amber-400 ring-1 ring-amber-400/50 shrink-0"
+                />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-[#27272a] border border-[#3f3f46] border-dashed flex items-center justify-center text-[#71717a] hover:text-amber-400 hover:border-amber-400/50 transition-colors shrink-0">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                </div>
+              )}
+            </button>
+
+            <PortalMenu
+              isOpen={activeReviewerAnchor?.id === item.id}
+              onClose={() => setActiveReviewerAnchor(null)}
+              anchorRect={activeReviewerAnchor?.id === item.id ? activeReviewerAnchor.rect : null}
+              triggerElement={activeReviewerAnchor?.id === item.id ? activeReviewerAnchor.el : null}
+              align="left"
+              className="w-48 flex flex-col gap-0.5"
+            >
+              <div className="px-2 py-1 text-[10px] uppercase font-bold text-[#71717a]">
+                Assign Reviewer
+              </div>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveReviewerAnchor(
-                    activeReviewerAnchor?.id === item.id
-                      ? null
-                      : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
-                  );
+                onClick={() => {
+                  handleSetReviewer(item.id, null);
+                  setActiveReviewerAnchor(null);
                 }}
-                className="flex items-center gap-1.5 hover:opacity-85 p-0.5 rounded cursor-pointer transition-all max-w-full truncate"
-                title={reviewer ? `Reviewer: ${reviewer.name} (Click to change)` : 'No Reviewer (Click to assign)'}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#71717a] hover:text-[#f4f4f5] cursor-pointer text-left transition-colors"
               >
-                {reviewer ? (
-                  <>
-                    <img
-                      src={reviewer.avatar}
-                      alt={`Reviewer: ${reviewer.name}`}
-                      className="w-5 h-5 rounded-full object-cover border border-amber-400 ring-1 ring-amber-400/50 shrink-0"
-                    />
-                    <span className="text-xs text-amber-300 truncate hidden sm:inline">{reviewer.name}</span>
-                  </>
-                ) : (
-                  <div className="w-5 h-5 rounded-full bg-[#27272a] border border-[#3f3f46] flex items-center justify-center text-[#71717a] hover:text-[#f4f4f5] transition-colors shrink-0">
-                    <ShieldCheck className="w-3 h-3" />
-                  </div>
-                )}
+                <ShieldCheck className="w-4 h-4" />
+                <span>None</span>
               </button>
-
-              <PortalMenu
-                isOpen={activeReviewerAnchor?.id === item.id}
-                onClose={() => setActiveReviewerAnchor(null)}
-                anchorRect={activeReviewerAnchor?.id === item.id ? activeReviewerAnchor.rect : null}
-                triggerElement={activeReviewerAnchor?.id === item.id ? activeReviewerAnchor.el : null}
-                align="left"
-                className="w-48 flex flex-col gap-0.5"
-              >
-                <div className="px-2 py-1 text-[10px] uppercase font-bold text-[#71717a]">
-                  Assign Reviewer
-                </div>
+              {(appData.persons || []).map((person) => (
                 <button
+                  key={person.id}
                   type="button"
                   onClick={() => {
-                    handleSetReviewer(item.id, null);
+                    handleSetReviewer(item.id, person.id);
                     setActiveReviewerAnchor(null);
                   }}
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#71717a] hover:text-[#f4f4f5] cursor-pointer text-left transition-colors"
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
+                    item.reviewerId === person.id ? 'font-semibold bg-[#27272a]' : ''
+                  }`}
                 >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>None</span>
+                  <img src={person.avatar} alt={person.name} className="w-5 h-5 rounded-full object-cover" />
+                  <div className="flex-1 truncate">
+                    <div className="truncate">{person.name}</div>
+                    <div className="text-[10px] text-[#71717a] truncate">{person.role}</div>
+                  </div>
                 </button>
-                {(appData.persons || []).map((person) => (
-                  <button
-                    key={person.id}
-                    type="button"
-                    onClick={() => {
-                      handleSetReviewer(item.id, person.id);
-                      setActiveReviewerAnchor(null);
-                    }}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
-                      item.reviewerId === person.id ? 'font-semibold bg-[#27272a]' : ''
-                    }`}
-                  >
-                    <img src={person.avatar} alt={person.name} className="w-5 h-5 rounded-full object-cover" />
-                    <div className="flex-1 truncate">
-                      <div className="truncate">{person.name}</div>
-                      <div className="text-[10px] text-[#71717a] truncate">{person.role}</div>
-                    </div>
-                  </button>
-                ))}
-              </PortalMenu>
-            </div>
-          )}
+              ))}
+            </PortalMenu>
+          </div>
 
           {/* Column 7: TIMER */}
-          {colSettings.timer !== false && (
-            <div
-              style={{
-                width: `${columnWidths.timer || DEFAULT_TREE_WIDTHS.timer}px`,
-                minWidth: `${columnWidths.timer || DEFAULT_TREE_WIDTHS.timer}px`,
-              }}
-              className="px-2 xl:px-3 shrink-0 flex items-center justify-end gap-2 xl:gap-3"
-            >
+          <div
+            className="w-[130px] min-w-[130px] px-2 xl:px-3 shrink-0 flex items-center justify-end gap-2 xl:gap-3"
+          >
               <span
                 className={`font-mono text-[11px] whitespace-nowrap shrink-0 ${
                   isTimerRunning ? 'text-orange-400 font-bold animate-pulse' : 'text-[#71717a]'
@@ -1021,18 +913,12 @@ export const TreeView: React.FC<TreeViewProps> = ({
                 </button>
               )}
             </div>
-          )}
 
           {/* Column 8: MORE */}
-          {colSettings.actions !== false && (
-            <div
-              style={{
-                width: `${columnWidths.actions || DEFAULT_TREE_WIDTHS.actions}px`,
-                minWidth: `${columnWidths.actions || DEFAULT_TREE_WIDTHS.actions}px`,
-              }}
-              className="px-1 xl:px-2 shrink-0 flex items-center justify-center relative"
-              data-popover-root
-            >
+          <div
+            className="w-[55px] min-w-[55px] px-1 xl:px-2 shrink-0 flex items-center justify-center relative"
+            data-popover-root
+          >
               <button
                 type="button"
                 onClick={(e) => {
@@ -1149,7 +1035,6 @@ export const TreeView: React.FC<TreeViewProps> = ({
                 )}
               </PortalMenu>
             </div>
-          )}
         </div>
 
         {/* Render Child SubItems recursively */}
@@ -1162,8 +1047,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
               depth + 1,
               idx === 0,
               idx === item.subItems.length - 1,
-              isExpanded,
-              colSettings
+              isExpanded
             )
           )}
       </React.Fragment>
@@ -1460,170 +1344,64 @@ export const TreeView: React.FC<TreeViewProps> = ({
               </div>
 
               {/* UNBOXED TASK LIST TABLE (Consistent with Notion View layout & mobile/tablet rules) */}
-              {(() => {
-                const colSettings = project.columnSettings || DEFAULT_TREE_COLUMNS;
-                return (
-                  <div className="overflow-x-auto">
-                    <div className="min-w-[850px] min-h-[140px] pb-4">
-                      {/* Table Column Headers */}
-                      <div className="flex items-center border-b border-[#27272a] text-[11px] font-semibold text-[#71717a] select-none py-2.5 px-1 tracking-wider uppercase">
-                        {/* 1. Name */}
-                        <div
-                          style={{
-                            width: `${columnWidths.name || DEFAULT_TREE_WIDTHS.name}px`,
-                            minWidth: `${columnWidths.name || DEFAULT_TREE_WIDTHS.name}px`,
-                          }}
-                          className="flex items-center justify-between pl-2 xl:pl-4 relative group shrink-0 flex-1 min-w-[200px]"
-                        >
-                          <span>Name</span>
-                          <div
-                            onMouseDown={(e) => handleStartResize('name', e)}
-                            className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
-                            title="Drag to resize column"
-                          />
-                        </div>
+              <div className="overflow-x-auto">
+                <div className="min-w-[720px] min-h-[140px] pb-4">
+                  {/* Table Column Headers */}
+                  <div className="flex items-center border-b border-[#27272a] text-[11px] font-semibold text-[#71717a] select-none py-2.5 px-1 tracking-wider uppercase">
+                    {/* 1. Name */}
+                    <div className="flex-1 min-w-[200px] pl-2 xl:pl-4 shrink-0 flex items-center">
+                      <span>Name</span>
+                    </div>
 
-                        {/* 2. Status */}
-                        {colSettings.status !== false && (
-                          <div
-                            style={{
-                              width: `${columnWidths.status || DEFAULT_TREE_WIDTHS.status}px`,
-                              minWidth: `${columnWidths.status || DEFAULT_TREE_WIDTHS.status}px`,
-                            }}
-                            className="px-2 xl:px-3 shrink-0 relative group flex items-center justify-between"
-                          >
-                            <span>Status</span>
-                            <div
-                              onMouseDown={(e) => handleStartResize('status', e)}
-                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
-                              title="Drag to resize column"
-                            />
-                          </div>
-                        )}
+                    {/* 2. Status */}
+                    <div className="w-[140px] min-w-[140px] px-2 xl:px-3 shrink-0 flex items-center">
+                      <span>Status</span>
+                    </div>
 
-                        {/* 3. Progress */}
-                        {colSettings.progress !== false && (
-                          <div
-                            style={{
-                              width: `${columnWidths.progress || DEFAULT_TREE_WIDTHS.progress}px`,
-                              minWidth: `${columnWidths.progress || DEFAULT_TREE_WIDTHS.progress}px`,
-                            }}
-                            className="px-2 xl:px-3 shrink-0 relative group flex items-center justify-between"
-                          >
-                            <span>Progress</span>
-                            <div
-                              onMouseDown={(e) => handleStartResize('progress', e)}
-                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
-                              title="Drag to resize column"
-                            />
-                          </div>
-                        )}
+                    {/* 3. Progress */}
+                    <div className="w-[110px] min-w-[110px] px-2 xl:px-3 shrink-0 flex items-center">
+                      <span>Progress</span>
+                    </div>
 
-                        {/* 4. Date */}
-                        {colSettings.date !== false && (
-                          <div
-                            style={{
-                              width: `${columnWidths.date || DEFAULT_TREE_WIDTHS.date}px`,
-                              minWidth: `${columnWidths.date || DEFAULT_TREE_WIDTHS.date}px`,
-                            }}
-                            className="px-2 xl:px-4 shrink-0 relative group flex items-center justify-between"
-                          >
-                            <span>Date</span>
-                            <div
-                              onMouseDown={(e) => handleStartResize('date', e)}
-                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
-                              title="Drag to resize column"
-                            />
-                          </div>
-                        )}
+                    {/* 4. Date */}
+                    <div className="w-[190px] min-w-[190px] px-2 xl:px-4 shrink-0 flex items-center">
+                      <span>Date</span>
+                    </div>
 
-                        {/* 5. Assignee */}
-                        {colSettings.assignee !== false && (
-                          <div
-                            style={{
-                              width: `${columnWidths.assignee || DEFAULT_TREE_WIDTHS.assignee}px`,
-                              minWidth: `${columnWidths.assignee || DEFAULT_TREE_WIDTHS.assignee}px`,
-                            }}
-                            className="px-2 xl:px-3 shrink-0 relative group flex items-center justify-between"
-                          >
-                            <span>Assignee</span>
-                            <div
-                              onMouseDown={(e) => handleStartResize('assignee', e)}
-                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
-                              title="Drag to resize column"
-                            />
-                          </div>
-                        )}
+                    {/* 5. Assignee (A) */}
+                    <div className="w-[48px] min-w-[48px] px-1 shrink-0 flex items-center justify-center text-center" title="Assignee">
+                      <span>A</span>
+                    </div>
 
-                        {/* 6. Reviewer */}
-                        {colSettings.reviewer !== false && (
-                          <div
-                            style={{
-                              width: `${columnWidths.reviewer || DEFAULT_TREE_WIDTHS.reviewer}px`,
-                              minWidth: `${columnWidths.reviewer || DEFAULT_TREE_WIDTHS.reviewer}px`,
-                            }}
-                            className="px-2 xl:px-3 shrink-0 relative group flex items-center justify-between"
-                          >
-                            <span>Reviewer</span>
-                            <div
-                              onMouseDown={(e) => handleStartResize('reviewer', e)}
-                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
-                              title="Drag to resize column"
-                            />
-                          </div>
-                        )}
+                    {/* 6. Reviewer (R) */}
+                    <div className="w-[48px] min-w-[48px] px-1 shrink-0 flex items-center justify-center text-center" title="Reviewer">
+                      <span>R</span>
+                    </div>
 
-                        {/* 7. Timer */}
-                        {colSettings.timer !== false && (
-                          <div
-                            style={{
-                              width: `${columnWidths.timer || DEFAULT_TREE_WIDTHS.timer}px`,
-                              minWidth: `${columnWidths.timer || DEFAULT_TREE_WIDTHS.timer}px`,
-                            }}
-                            className="px-2 xl:px-3 shrink-0 text-right pr-2 xl:pr-3 relative group flex items-center justify-end"
-                          >
-                            <span>Timer</span>
-                            <div
-                              onMouseDown={(e) => handleStartResize('timer', e)}
-                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
-                              title="Drag to resize column"
-                            />
-                          </div>
-                        )}
+                    {/* 7. Timer */}
+                    <div className="w-[130px] min-w-[130px] px-2 xl:px-3 shrink-0 flex items-center justify-end pr-2 xl:pr-3 text-right">
+                      <span>Timer</span>
+                    </div>
 
-                        {/* 8. More */}
-                        {colSettings.actions !== false && (
-                          <div
-                            style={{
-                              width: `${columnWidths.actions || DEFAULT_TREE_WIDTHS.actions}px`,
-                              minWidth: `${columnWidths.actions || DEFAULT_TREE_WIDTHS.actions}px`,
-                            }}
-                            className="px-1 xl:px-2 shrink-0 text-center relative group flex items-center justify-center"
-                          >
-                            <span>Actions</span>
-                            <div
-                              onMouseDown={(e) => handleStartResize('actions', e)}
-                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-orange-500/60 active:bg-orange-500 z-10 transition-colors"
-                              title="Drag to resize column"
-                            />
-                          </div>
-                        )}
-                      </div>
+                    {/* 8. More */}
+                    <div className="w-[55px] min-w-[55px] px-1 xl:px-2 shrink-0 flex items-center justify-center text-center">
+                      <span>Actions</span>
+                    </div>
+                  </div>
 
-                      {/* Tree Body */}
-                      <div className="flex flex-col divide-y-0">
-                        {projectItems.length > 0 ? (
-                          projectItems.map((item, idx) =>
-                            renderItemRow(
-                              item,
-                              project.id,
-                              0,
-                              idx === 0,
-                              idx === projectItems.length - 1,
-                              true,
-                              colSettings
-                            )
-                          )
+                  {/* Tree Body */}
+                  <div className="flex flex-col divide-y-0">
+                    {projectItems.length > 0 ? (
+                      projectItems.map((item, idx) =>
+                        renderItemRow(
+                          item,
+                          project.id,
+                          0,
+                          idx === 0,
+                          idx === projectItems.length - 1,
+                          true
+                        )
+                      )
                         ) : (
                           <div className="py-8 text-center text-[#71717a] text-xs border-b border-[#27272a]">
                             No tasks found in this project. Click{' '}
@@ -1649,12 +1427,10 @@ export const TreeView: React.FC<TreeViewProps> = ({
                       </div>
                     </div>
                   </div>
-                );
-              })()}
-            </div>
-          );
-        })
-      )}
+                </div>
+              );
+            })
+          )}
       </div>
     </div>
   );

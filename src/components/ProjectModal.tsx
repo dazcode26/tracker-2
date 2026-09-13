@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, FolderPlus, Archive, Copy, LayoutGrid, CheckSquare } from 'lucide-react';
+import { X, FolderPlus, Archive, Copy } from 'lucide-react';
 import { ProjectNode, ProjectStatus } from '../types';
 
 const PROJECT_EMOJIS = ['🌳', '📁', '💻', '🎬', '📄', '📝', '⚡', '🚀', '🎯', '✨', '🔥', '📌', '🎨', '⚙️', '💡', '🏷️'];
@@ -14,17 +14,6 @@ export const DEFAULT_TREE_COLUMNS: Record<string, boolean> = {
   timer: true,
   actions: true,
 };
-
-export const AVAILABLE_COLUMNS: { id: string; label: string; desc: string; required?: boolean }[] = [
-  { id: 'name', label: 'Task Name', desc: 'Main hierarchy title', required: true },
-  { id: 'status', label: 'Status', desc: 'Task execution state' },
-  { id: 'progress', label: 'Progress', desc: 'Percentage progress bar' },
-  { id: 'date', label: 'Date / Schedule', desc: 'Target date or active period' },
-  { id: 'assignee', label: 'Assignee', desc: 'Assigned team member' },
-  { id: 'reviewer', label: 'Reviewer', desc: 'Assigned reviewer member' },
-  { id: 'timer', label: 'Timer', desc: 'Time logged & play/stop button' },
-  { id: 'actions', label: 'Actions / More', desc: 'Context menu button' },
-];
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -55,7 +44,6 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   const [icon, setIcon] = useState<string>('🌳');
   const [status, setStatus] = useState<ProjectStatus>('active');
   const [description, setDescription] = useState<string>('');
-  const [columnSettings, setColumnSettings] = useState<Record<string, boolean>>({ ...DEFAULT_TREE_COLUMNS });
 
   const isEditing = Boolean(initialProject && typeof initialProject === 'object' && 'id' in initialProject && typeof initialProject.id === 'string');
 
@@ -67,33 +55,23 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         setIcon(initialProject.icon || '🌳');
         setStatus(initialProject.status || 'active');
         setDescription(initialProject.description || '');
-        setColumnSettings(initialProject.columnSettings || { ...DEFAULT_TREE_COLUMNS });
       } else {
         setTitle('');
         setColor('#f97316');
         setIcon('🌳');
         setStatus('active');
         setDescription('');
-        setColumnSettings({ ...DEFAULT_TREE_COLUMNS });
       }
     }
-  }, [isOpen, isEditing, initialProject?.id, initialProject?.icon, initialProject?.description, initialProject?.columnSettings]);
+  }, [isOpen, isEditing, initialProject?.id, initialProject?.icon, initialProject?.description]);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
     if (!title.trim()) return;
-    onSaveProject(title, color, status, icon, description, columnSettings);
+    onSaveProject(title, color, status, icon, description, DEFAULT_TREE_COLUMNS);
     onClose();
-  };
-
-  const handleToggleColumn = (colId: string) => {
-    if (colId === 'name') return; // Name is always required
-    setColumnSettings((prev) => ({
-      ...prev,
-      [colId]: !prev[colId],
-    }));
   };
 
   const handleArchiveToggle = () => {
@@ -184,52 +162,6 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                   style={{ backgroundColor: c }}
                 ></button>
               ))}
-            </div>
-          </div>
-
-          {/* TreeView Column Settings */}
-          <div className="pt-2 border-t border-[#27272a]">
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-[#a1a1aa] font-mono uppercase flex items-center gap-1.5">
-                <LayoutGrid className="w-3.5 h-3.5 text-orange-400" />
-                <span>TreeView Column Settings</span>
-              </label>
-              <button
-                type="button"
-                onClick={() => setColumnSettings({ ...DEFAULT_TREE_COLUMNS })}
-                className="text-[10px] text-orange-400 hover:underline cursor-pointer"
-              >
-                Reset Default
-              </button>
-            </div>
-            <p className="text-[11px] text-[#71717a] mb-2.5">
-              Select which columns to display in TreeView for this project:
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-[#18181b] border border-[#27272a] p-3 rounded-xl">
-              {AVAILABLE_COLUMNS.map((col) => {
-                const isChecked = col.required || columnSettings[col.id] !== false;
-                return (
-                  <label
-                    key={col.id}
-                    className={`flex items-center gap-2.5 p-1.5 rounded-lg transition-colors cursor-pointer select-none ${
-                      isChecked ? 'bg-[#27272a]/60 text-[#f4f4f5]' : 'text-[#71717a] hover:bg-[#27272a]/30'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      disabled={col.required}
-                      onChange={() => handleToggleColumn(col.id)}
-                      className="w-3.5 h-3.5 rounded accent-orange-500 cursor-pointer disabled:opacity-50"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <span className="font-medium text-xs block leading-tight">{col.label}</span>
-                      <span className="text-[10px] text-[#71717a] block leading-tight truncate">{col.desc}</span>
-                    </div>
-                  </label>
-                );
-              })}
             </div>
           </div>
 

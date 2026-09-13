@@ -974,7 +974,7 @@ function WorkspaceApp() {
       <div
         className={`flex-1 min-h-0 flex flex-row relative ${
           currentView === 'tasks' || currentView === 'calendar' || currentView === 'timeline' || currentView === 'gantt'
-            ? 'h-full overflow-hidden'
+            ? 'overflow-hidden'
             : ''
         }`}
       >

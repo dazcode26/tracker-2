@@ -51,42 +51,62 @@ export const ActiveTimerBanner: React.FC<ActiveTimerBannerProps> = ({
   if (!activeTimer || !activeItemInfo) return null;
 
   const item = activeItemInfo.item;
+  const isLight = appData.settings.theme === 'light';
 
   return (
     <div
-      className={`sticky top-0 w-full shrink-0 border-b transition-colors z-50 flex items-center justify-center px-4 h-9 select-none animate-in fade-in slide-in-from-top-2 duration-200 bg-[#161619] [data-theme=light]:bg-[#f1f5f9] ${
-        hideOnLg ? 'lg:hidden' : ''
-      }`}
+      id="active-timer-banner"
+      className={`active-timer-banner sticky top-0 w-full shrink-0 border-b transition-colors z-50 flex items-center justify-center px-4 h-9 select-none animate-in fade-in slide-in-from-top-2 duration-200 ${
+        isLight
+          ? 'bg-[#fff7ed] border-orange-200/80 text-slate-900 shadow-xs'
+          : 'bg-[#161619] border-orange-500/30 text-[#f4f4f5]'
+      } ${hideOnLg ? 'lg:hidden' : ''}`}
       style={{
-        borderColor: 'var(--accent-subtle-border, rgba(249, 115, 22, 0.40))',
+        borderColor: isLight
+          ? 'rgba(249, 115, 22, 0.35)'
+          : 'var(--accent-subtle-border, rgba(249, 115, 22, 0.40))',
       }}
     >
       {/* Centered Cluster: Task Name, Clock, and Stop Icon Button */}
       <div className="flex items-center justify-center gap-2.5 sm:gap-3 max-w-full truncate px-2">
-        {/* Task Name (Project name removed) */}
+        {/* Task Name */}
         <button
           type="button"
           onClick={() => onOpenItemModal && onOpenItemModal(item)}
-          className={`text-xs font-semibold text-[#f4f4f5] [data-theme=light]:text-slate-900 truncate hover:underline text-left cursor-pointer flex items-center gap-1 max-w-[180px] sm:max-w-[320px] md:max-w-[480px] ${
-            onOpenItemModal ? 'group' : ''
-          }`}
+          className={`active-timer-task-name text-xs font-semibold truncate hover:underline text-left cursor-pointer flex items-center gap-1 max-w-[180px] sm:max-w-[320px] md:max-w-[480px] ${
+            isLight
+              ? 'text-slate-900 hover:text-orange-600'
+              : 'text-[#f4f4f5] hover:text-orange-300'
+          } ${onOpenItemModal ? 'group' : ''}`}
           title={`Task: ${item.name} (Click to open details)`}
         >
           {item.icon && <span className="text-xs shrink-0">{item.icon}</span>}
           <span className="truncate">{item.name}</span>
           {onOpenItemModal && (
-            <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-[#a1a1aa]" />
+            <ArrowUpRight
+              className={`w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ${
+                isLight ? 'text-slate-500' : 'text-[#a1a1aa]'
+              }`}
+            />
           )}
         </button>
 
         {/* Subtle Separator Dot */}
-        <span className="text-[#71717a] [data-theme=light]:text-slate-400 text-xs shrink-0 select-none">·</span>
+        <span
+          className={`active-timer-sep text-xs shrink-0 select-none ${
+            isLight ? 'text-slate-400' : 'text-[#71717a]'
+          }`}
+        >
+          ·
+        </span>
 
         {/* Raw Live Digital Clock (No badge / box border) */}
         <span
-          className="text-xs sm:text-sm font-mono font-bold tracking-wider shrink-0"
+          className={`text-xs sm:text-sm font-mono font-bold tracking-wider shrink-0 ${
+            isLight ? 'text-orange-600' : 'text-orange-400'
+          }`}
           style={{
-            color: 'var(--accent-text, #fb923c)',
+            color: isLight ? '#ea580c' : 'var(--accent-text, #fb923c)',
           }}
           title="Elapsed session time"
         >
@@ -97,10 +117,7 @@ export const ActiveTimerBanner: React.FC<ActiveTimerBannerProps> = ({
         <button
           type="button"
           onClick={onStopTimer}
-          className="w-6 h-6 rounded-md text-white transition-all flex items-center justify-center shadow-xs cursor-pointer shrink-0 hover:opacity-90 hover:scale-105 active:scale-95"
-          style={{
-            backgroundColor: 'var(--accent-main, #f97316)',
-          }}
+          className="w-6 h-6 rounded-md text-white transition-all flex items-center justify-center shadow-xs cursor-pointer shrink-0 hover:opacity-90 hover:scale-105 active:scale-95 bg-orange-500 hover:bg-orange-600"
           title="Stop timer & log session"
           aria-label="Stop timer and log session"
         >

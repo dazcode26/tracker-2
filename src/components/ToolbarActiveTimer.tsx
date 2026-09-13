@@ -51,10 +51,16 @@ export const ToolbarActiveTimer: React.FC<ToolbarActiveTimerProps> = ({
   if (!activeTimer || !activeItemInfo) return null;
 
   const item = activeItemInfo.item;
+  const isLight = appData?.settings?.theme === 'light';
 
   return (
     <div
-      className={`h-8 px-2 sm:px-2.5 rounded-lg border border-orange-500/35 bg-orange-500/10 [data-theme=light]:bg-orange-50 [data-theme=light]:border-orange-300 flex items-center gap-1.5 sm:gap-2 text-xs select-none max-w-[240px] xl:max-w-[300px] shrink-0 ${className}`}
+      id="toolbar-active-timer"
+      className={`toolbar-active-timer h-8 px-2 sm:px-2.5 rounded-lg border flex items-center gap-1.5 sm:gap-2 text-xs select-none max-w-[320px] lg:max-w-[420px] xl:max-w-[580px] 2xl:max-w-[760px] shrink min-w-0 transition-colors ${
+        isLight
+          ? 'bg-orange-50/90 border-orange-300/80 shadow-xs'
+          : 'border-orange-500/35 bg-orange-500/10'
+      } ${className}`}
       title={`Active Timer: ${item.name} (${formatTimerClock(elapsedSeconds)})`}
     >
       {/* Live Pulsing Dot */}
@@ -67,7 +73,9 @@ export const ToolbarActiveTimer: React.FC<ToolbarActiveTimerProps> = ({
       <button
         type="button"
         onClick={() => onOpenItemModal && onOpenItemModal(item)}
-        className="font-semibold text-xs text-[#f4f4f5] [data-theme=light]:text-slate-900 truncate max-w-[90px] xl:max-w-[140px] hover:underline cursor-pointer text-left shrink"
+        className={`toolbar-timer-task-name font-semibold text-xs truncate max-w-[180px] lg:max-w-[260px] xl:max-w-[420px] 2xl:max-w-[600px] hover:underline cursor-pointer text-left shrink min-w-0 ${
+          isLight ? 'text-slate-900 hover:text-orange-600' : 'text-[#f4f4f5] hover:text-orange-300'
+        }`}
         title={`Task: ${item.name} (Click to open details)`}
       >
         {item.icon && <span className="mr-1 shrink-0">{item.icon}</span>}
@@ -75,13 +83,19 @@ export const ToolbarActiveTimer: React.FC<ToolbarActiveTimerProps> = ({
       </button>
 
       {/* Subtle Separator */}
-      <span className="text-orange-500/40 [data-theme=light]:text-orange-400/50 text-[10px] select-none shrink-0">
+      <span
+        className={`text-[10px] select-none shrink-0 ${
+          isLight ? 'text-orange-400' : 'text-orange-500/40'
+        }`}
+      >
         |
       </span>
 
       {/* Live Clock */}
       <span
-        className="font-mono font-bold text-xs text-orange-400 [data-theme=light]:text-orange-600 tracking-wider shrink-0"
+        className={`font-mono font-bold text-xs tracking-wider shrink-0 ${
+          isLight ? 'text-orange-600' : 'text-orange-400'
+        }`}
         title="Elapsed time"
       >
         {formatTimerClock(elapsedSeconds)}

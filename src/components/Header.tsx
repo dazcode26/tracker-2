@@ -129,7 +129,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Desktop Left Navigation Sidebar (Icon Rail Style) */}
       <aside
         className={`hidden md:flex fixed ${
-          hasActiveTimer ? 'top-9' : 'top-0'
+          hasActiveTimer ? 'max-lg:top-9 top-0' : 'top-0'
         } left-0 bottom-0 z-40 bg-[#101010] flex-col items-center justify-between transition-all duration-200 w-16 py-3.5 select-none`}
       >
         {/* Top Section: Nav Items directly at the top */}

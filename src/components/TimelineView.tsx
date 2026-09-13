@@ -987,9 +987,10 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   }, [currentDate, timeScale, weekDays]);
 
   return (
-    <div className="w-full md:h-full md:flex md:flex-col md:min-h-0 space-y-2 pb-0">
+    <div className="w-full md:h-full md:flex md:flex-col md:min-h-0 space-y-2 pb-[10px]">
       {/* Time-Based Unified Toolbar */}
       <TimeBasedToolbar
+        isFullHeight={true}
         projects={appData.projects}
         selectedProjectId={currentProjectId}
         onSelectProject={handleFilterChange}
@@ -1049,7 +1050,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       )}
 
       {/* ================= GANTT TIMELINE MATRIX ================= */}
-      <div className="bg-[#121215] border border-[#27272a] rounded-none overflow-hidden shadow-2xl flex-1 min-h-0 flex flex-col md:h-full">
+      <div className="bg-[#121215] border border-[#27272a] rounded-xl overflow-hidden shadow-2xl flex-1 min-h-0 flex flex-col md:h-full">
         <div className="overflow-auto flex-1 min-h-0">
           {/* ================= 1. MONTH VIEW ================= */}
           {timeScale === 'month' && (

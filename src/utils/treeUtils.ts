@@ -1322,8 +1322,8 @@ export function getRealizationDatesForProject(project: ProjectNode): { minDate: 
 }
 
 /**
- * Formats realization start and end date range for display next to Timer.
- * Example: "24/08/2026 - 27/08/2026" or "24/08/2026"
+ * Formats realization start and end date range for display in Tree View Date column.
+ * Example: "30 AUG 26 - 03 SEP 26" or "30 AUG 26"
  */
 export function formatStartEndDateRange(item: ItemNode): string {
   const { minDate, maxDate } = getRealizationDatesForTree(item);
@@ -1332,11 +1332,13 @@ export function formatStartEndDateRange(item: ItemNode): string {
     return '';
   }
 
+  const MONTH_ABBRS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
   const formatDate = (d: Date): string => {
     const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    return `${day}/${month}/${year}`;
+    const month = MONTH_ABBRS[d.getMonth()];
+    const year = String(d.getFullYear()).slice(-2);
+    return `${day} ${month} ${year}`;
   };
 
   const minStr = formatDate(minDate);

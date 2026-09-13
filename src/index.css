@@ -434,7 +434,8 @@
 [data-theme="light"] .bg-\[\#0e0e10\],
 [data-theme="light"] .bg-\[\#0e0e11\],
 [data-theme="light"] .bg-\[\#0f0f12\],
-[data-theme="light"] .bg-\[\#0f0f12\]\/60 {
+[data-theme="light"] .bg-\[\#0f0f12\]\/60,
+[data-theme="light"] .bg-\[\#161619\] {
   background-color: #f8fafc !important;
 }
 
@@ -622,4 +623,43 @@
 [data-theme="light"] .shadow-lg {
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.04) !important;
 }
+
+/* Active Timer Banner Light & Dark Mode Contrast Rules */
+[data-theme="light"] #active-timer-banner,
+[data-theme="light"] .active-timer-banner {
+  background-color: #fff7ed !important;
+  border-bottom-color: rgba(249, 115, 22, 0.35) !important;
+}
+
+[data-theme="light"] #active-timer-banner .active-timer-task-name,
+[data-theme="light"] .active-timer-banner .active-timer-task-name {
+  color: #0f172a !important;
+}
+
+[data-theme="light"] #active-timer-banner .active-timer-task-name:hover,
+[data-theme="light"] .active-timer-banner .active-timer-task-name:hover {
+  color: #ea580c !important;
+}
+
+[data-theme="light"] #active-timer-banner .active-timer-sep,
+[data-theme="light"] .active-timer-banner .active-timer-sep {
+  color: #94a3b8 !important;
+}
+
+[data-theme="light"] #toolbar-active-timer,
+[data-theme="light"] .toolbar-active-timer {
+  background-color: #fff7ed !important;
+  border-color: rgba(249, 115, 22, 0.40) !important;
+}
+
+[data-theme="light"] #toolbar-active-timer .toolbar-timer-task-name,
+[data-theme="light"] .toolbar-active-timer .toolbar-timer-task-name {
+  color: #0f172a !important;
+}
+
+[data-theme="light"] #toolbar-active-timer .toolbar-timer-task-name:hover,
+[data-theme="light"] .toolbar-active-timer .toolbar-timer-task-name:hover {
+  color: #ea580c !important;
+}
+
 

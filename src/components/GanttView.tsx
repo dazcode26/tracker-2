@@ -738,9 +738,10 @@ export const GanttView: React.FC<GanttViewProps> = ({
   const activeTimerItemId = appData.settings?.activeTimer?.itemId;
 
   return (
-    <div className="w-full md:h-full md:flex md:flex-col md:min-h-0 space-y-2 pb-0">
+    <div className="w-full md:h-full md:flex md:flex-col md:min-h-0 space-y-2 pb-[10px]">
       {/* Standardized Time-Based Toolbar */}
       <TimeBasedToolbar
+        isFullHeight={true}
         projects={appData.projects}
         selectedProjectId={selectedProjectId}
         onSelectProject={(p) => (onSelectProjectFilter ? onSelectProjectFilter(p as string) : setInternalProjectId(p as string))}
@@ -768,7 +769,7 @@ export const GanttView: React.FC<GanttViewProps> = ({
       />
 
       {/* GANTT DUAL-PANE CONTAINER */}
-      <div className="bg-[#18181b] border border-[#27272a] rounded-none shadow-xl overflow-hidden flex flex-col flex-1 min-h-0 md:h-full">
+      <div className="bg-[#18181b] border border-[#27272a] rounded-xl shadow-xl overflow-hidden flex flex-col flex-1 min-h-0 md:h-full">
         {/* Top Information Strip & Quick Expand Controls */}
         <div className="px-3 sm:px-4 py-2 bg-[#141418]/60 border-b border-[#27272a] flex items-center justify-between gap-2 text-xs shrink-0">
           <div className="flex items-center gap-3 text-[#a1a1aa]">

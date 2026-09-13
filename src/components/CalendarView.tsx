@@ -159,7 +159,7 @@ function calculateNonOverlappingLayout(
   events: CalendarEvent[],
   hourHeight: number,
   minCardHeight: number = 42,
-  gapPx: number = 5
+  gapPx: number = 3
 ): LayoutedTimedEvent[] {
   if (!events || events.length === 0) return [];
 
@@ -230,8 +230,8 @@ const MonthDayCellTasks: React.FC<MonthDayCellTasksProps> = ({
 
       const isMobile = window.innerWidth < 640;
       const cardHeight = isMobile ? 20 : 23;
-      const gap = 4;
-      const moreBtnHeight = isMobile ? 18 : 20;
+      const gap = 3;
+      const moreBtnHeight = isMobile ? 16 : 18;
 
       if (tasks.length <= 1) {
         setCapacity(1);
@@ -268,7 +268,7 @@ const MonthDayCellTasks: React.FC<MonthDayCellTasksProps> = ({
   const hiddenCount = tasks.length - visibleTasks.length;
 
   return (
-    <div ref={containerRef} className="flex-1 flex flex-col gap-1 min-h-0 overflow-hidden">
+    <div ref={containerRef} className="flex-1 flex flex-col gap-[3px] min-h-0 overflow-hidden">
       {visibleTasks.map((task) => renderTaskCard(task))}
 
       {hiddenCount > 0 && (
@@ -1094,14 +1094,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           style={{
             backgroundColor: getSolid20PercentTint(task.color),
           }}
-          className={`px-1.5 py-0.5 sm:py-1 rounded text-[10.5px] sm:text-[11px] font-semibold leading-tight truncate cursor-pointer hover:brightness-95 transition-all flex items-center justify-between gap-1 group/card select-none shrink-0 shadow-xs text-slate-950 ${extraClass}`}
+          className={`px-1.5 py-0.5 sm:py-1 rounded text-[10.5px] sm:text-[11px] font-semibold leading-tight truncate cursor-pointer hover:brightness-95 transition-all flex items-center justify-between gap-1 group/card select-none shrink-0 text-slate-950 ${extraClass}`}
           title={fullTooltip}
         >
           <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate">
             {isCompleted ? (
               <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-950 shrink-0 stroke-[2.5]" />
             ) : (
-              <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-slate-900" />
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusConfig.dotBg}`} />
             )}
             <span className="truncate text-slate-950">
               {task.title}
@@ -1290,7 +1290,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               const allDayEvents = (weekEventsByDateKey.get(dKey) || []).filter((e) => e.isAllDay);
 
               return (
-                <div key={dKey} className="flex flex-col gap-1 min-h-[30px] p-0.5">
+                <div key={dKey} className="flex flex-col gap-[3px] min-h-[30px] p-0.5">
                   {allDayEvents.map((ev) => {
                     const isCompleted = ev.status === 'completed';
                     const statusConfig = getStatusConfig(ev.status);
@@ -1305,7 +1305,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         style={{
                           backgroundColor: getSolid20PercentTint(ev.color),
                         }}
-                        className="px-2 py-1 rounded text-[11px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all flex items-center justify-between gap-1 shadow-xs text-slate-950"
+                        className="px-2 py-1 rounded text-[11px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all flex items-center justify-between gap-1 text-slate-950"
                         title={`${ev.title} (${ev.project.title})${durationText ? ` • ${durationText}` : ''}${ev.sessionCount && ev.sessionCount > 1 ? ` • ${ev.sessionCount} sessions` : ''} • Status: ${statusConfig.label}`}
                       >
                         <div className="flex items-center gap-1 min-w-0 truncate">
@@ -1319,7 +1319,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         {isCompleted ? (
                           <Check className="w-3 h-3 text-slate-950 shrink-0 stroke-[2.5]" />
                         ) : (
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-slate-900" />
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusConfig.dotBg}`} />
                         )}
                       </div>
                     );
@@ -1425,7 +1425,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           height: `${heightPx}px`,
                           backgroundColor: getSolid20PercentTint(ev.color),
                         }}
-                        className="absolute inset-x-1 rounded-lg p-1.5 text-xs shadow-md cursor-pointer hover:brightness-95 transition-all overflow-hidden z-10 flex flex-col justify-between group/card select-none text-slate-950"
+                        className="absolute inset-x-1 rounded-lg p-1.5 text-xs cursor-pointer hover:brightness-95 transition-all overflow-hidden z-10 flex flex-col justify-between group/card select-none text-slate-950"
                         title={`${ev.title}${timeWithDur ? ` | ${timeWithDur}` : ''} • ${ev.project.title} • Status: ${statusConfig.label}${ev.sessionCount && ev.sessionCount > 1 ? ` • ${ev.sessionCount} sessions consolidated` : ''}`}
                       >
                         <div className="flex items-start justify-between gap-1 min-w-0 relative z-10">
@@ -1436,7 +1436,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             <CheckCircle2 className="w-3.5 h-3.5 text-slate-950 shrink-0" />
                           ) : (
                             <span
-                              className="w-2 h-2 rounded-full shrink-0 mt-0.5 shadow-xs bg-slate-900"
+                              className={`w-2 h-2 rounded-full shrink-0 mt-0.5 ${statusConfig.dotBg}`}
                               title={`Status: ${statusConfig.label}`}
                             />
                           )}
@@ -1583,6 +1583,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     <div className="w-full md:h-full md:flex md:flex-col md:min-h-0 space-y-2 pb-[10px]">
       {/* Time-Based Unified Toolbar */}
       <TimeBasedToolbar
+        isFullHeight={true}
         projects={appData.projects}
         selectedProjectId={currentProjectId}
         onSelectProject={handleFilterChange}
@@ -1632,7 +1633,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               </button>
             </div>
 
-            <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto">
+            <div className="flex flex-col gap-[3px] max-h-72 overflow-y-auto">
               {popoverDay.tasks.map((task) => {
                 const isCompleted = task.status === 'completed';
                 const statusConfig = getStatusConfig(task.status);
@@ -1666,7 +1667,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     style={{
                       backgroundColor: getSolid20PercentTint(task.color),
                     }}
-                    className="px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer hover:brightness-95 transition-all flex items-center justify-between gap-2 shadow-xs text-slate-950"
+                    className="px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer hover:brightness-95 transition-all flex items-center justify-between gap-2 text-slate-950"
                     title={fullTooltip}
                   >
                     <div className="flex flex-col min-w-0 flex-1">
@@ -1686,7 +1687,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         <span className="text-[11px] text-slate-800 font-medium">{task.project.title}</span>
                         <span className="text-slate-500">•</span>
                         <span className="flex items-center gap-1 text-slate-900 font-medium">
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+                          <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dotBg}`} />
                           <span>{statusConfig.label}</span>
                         </span>
                         {task.sessionCount > 1 && (
@@ -1699,7 +1700,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     {isCompleted ? (
                       <Check className="w-3.5 h-3.5 text-slate-950 shrink-0 stroke-[2.5]" />
                     ) : (
-                      <span className="w-2 h-2 rounded-full shrink-0 bg-slate-900" />
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${statusConfig.dotBg}`} />
                     )}
                   </div>
                 );

@@ -233,15 +233,9 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
 
   const STATUS_SEQUENCE: ItemStatus[] = ['not-started', 'in-progress', 'review', 'completed'];
 
-  const getProjectCardStyle = (projectColor?: string, isRunning?: boolean) => {
+  const getProjectCardStyle = (projectColor?: string) => {
     const color = projectColor || '#f97316';
     const bg = getSolidKanbanTint(color);
-    if (isRunning) {
-      return {
-        backgroundColor: bg,
-        outline: '2px solid var(--accent-main, #f97316)',
-      };
-    }
     return {
       backgroundColor: bg,
     };
@@ -286,6 +280,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
       {/* Structural Toolbar */}
       <div className="shrink-0">
         <StructureToolbar
+          isFullHeight={true}
           projects={appData.projects}
           selectedProjectId={currentProjectId}
           onSelectProject={handleFilterChange}
@@ -406,7 +401,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                   const estSecs = item.estimatedSeconds || 0;
                   const assignee = appData.persons.find((p) => p.id === item.assigneeId);
                   const reviewer = item.reviewerId ? appData.persons.find((p) => p.id === item.reviewerId) : null;
-                  const cardStyle = getProjectCardStyle(project.color, isRunning);
+                  const cardStyle = getProjectCardStyle(project.color);
 
                   const statusCfg = getStatusConfig(item.status);
 
