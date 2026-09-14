@@ -231,7 +231,7 @@ const MonthDayCellTasks: React.FC<MonthDayCellTasksProps> = ({
       const isMobile = window.innerWidth < 640;
       const cardHeight = isMobile ? 20 : 23;
       const gap = 3;
-      const moreBtnHeight = isMobile ? 16 : 18;
+      const moreBtnHeight = cardHeight;
 
       if (tasks.length <= 1) {
         setCapacity(1);
@@ -278,7 +278,7 @@ const MonthDayCellTasks: React.FC<MonthDayCellTasksProps> = ({
             e.stopPropagation();
             onOpenPopover({ date, dateKey, tasks });
           }}
-          className="text-[10px] sm:text-[10.5px] font-medium text-orange-400 hover:text-orange-300 [data-theme=light]:text-orange-600 [data-theme=light]:hover:text-orange-700 text-left px-1.5 py-0.5 rounded hover:bg-orange-500/10 transition-colors cursor-pointer truncate shrink-0 select-none flex items-center gap-1"
+          className="text-[10.5px] sm:text-[11px] font-medium text-orange-400 hover:text-orange-300 [data-theme=light]:text-orange-600 [data-theme=light]:hover:text-orange-700 text-left px-1.5 py-0.5 sm:py-1 rounded hover:bg-orange-500/10 transition-colors cursor-pointer truncate shrink-0 select-none flex items-center gap-1 leading-tight"
           title={`View all ${tasks.length} tasks for this date`}
         >
           +{hiddenCount} more
@@ -1098,11 +1098,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           title={fullTooltip}
         >
           <div className="flex items-center gap-1.5 min-w-0 flex-1 truncate">
-            {isCompleted ? (
-              <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-950 shrink-0 stroke-[2.5]" />
-            ) : (
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusConfig.dotBg}`} />
-            )}
+            <span className="text-[10px] shrink-0 select-none">
+              {task.item?.icon || (task.item?.subItems && task.item.subItems.length > 0 ? '📁' : '📄')}
+            </span>
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusConfig.dotBg}`} />
             <span className="truncate text-slate-950">
               {task.title}
             </span>
@@ -1309,6 +1308,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         title={`${ev.title} (${ev.project.title})${durationText ? ` • ${durationText}` : ''}${ev.sessionCount && ev.sessionCount > 1 ? ` • ${ev.sessionCount} sessions` : ''} • Status: ${statusConfig.label}`}
                       >
                         <div className="flex items-center gap-1 min-w-0 truncate">
+                          <span className="text-[10px] shrink-0 select-none">
+                            {ev.item?.icon || (ev.item?.subItems && ev.item.subItems.length > 0 ? '📁' : '📄')}
+                          </span>
                           <span className="truncate text-slate-950">{ev.title}</span>
                           {ev.sessionCount && ev.sessionCount > 1 && (
                             <span className="text-[9px] px-1 py-0.2 rounded font-sans shrink-0 bg-black/10 text-slate-900 border border-black/15 font-semibold">
@@ -1316,11 +1318,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             </span>
                           )}
                         </div>
-                        {isCompleted ? (
-                          <Check className="w-3 h-3 text-slate-950 shrink-0 stroke-[2.5]" />
-                        ) : (
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusConfig.dotBg}`} />
-                        )}
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusConfig.dotBg}`} />
                       </div>
                     );
                   })}
@@ -1390,15 +1388,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     />
                   ))}
 
-                  {/* Red / Orange Current Time Line if Today */}
+                  {/* Blue Current Time Line if Today */}
                   {isToday && (
                     <div
                       style={{
-                        top: `${(14.5) * hourHeight}px`, // 14:30 indicator for demo
+                        top: `${(() => {
+                          const now = new Date();
+                          return (now.getHours() + now.getMinutes() / 60) * hourHeight;
+                        })()}px`,
                       }}
-                      className="absolute inset-x-0 border-t-2 border-orange-500 z-30 flex items-center pointer-events-none"
+                      className="absolute inset-x-0 border-t-2 border-blue-500 z-30 flex items-center pointer-events-none"
                     >
-                      <div className="w-2.5 h-2.5 rounded-full bg-orange-500 -ml-1.5 shadow-sm" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-blue-500 -ml-1.5 shadow-sm" />
                     </div>
                   )}
 
@@ -1429,17 +1430,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         title={`${ev.title}${timeWithDur ? ` | ${timeWithDur}` : ''} • ${ev.project.title} • Status: ${statusConfig.label}${ev.sessionCount && ev.sessionCount > 1 ? ` • ${ev.sessionCount} sessions consolidated` : ''}`}
                       >
                         <div className="flex items-start justify-between gap-1 min-w-0 relative z-10">
-                          <span className="font-semibold truncate text-[11px] leading-tight text-slate-950">
-                            {ev.title}
-                          </span>
-                          {isCompleted ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                          ) : (
-                            <span
-                              className={`w-2 h-2 rounded-full shrink-0 mt-0.5 ${statusConfig.dotBg}`}
-                              title={`Status: ${statusConfig.label}`}
-                            />
-                          )}
+                          <div className="flex items-center gap-1 min-w-0 truncate">
+                            <span className="text-[10px] shrink-0 select-none">
+                              {ev.item?.icon || (ev.item?.subItems && ev.item.subItems.length > 0 ? '📁' : '📄')}
+                            </span>
+                            <span className="font-semibold truncate text-[11px] leading-tight text-slate-950">
+                              {ev.title}
+                            </span>
+                          </div>
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 mt-0.5 ${statusConfig.dotBg}`}
+                            title={`Status: ${statusConfig.label}`}
+                          />
                         </div>
 
                         <div className="flex items-center justify-between text-[10px] font-mono mt-0.5 relative z-10 leading-none text-slate-800">
@@ -1672,6 +1674,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   >
                     <div className="flex flex-col min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[11px] shrink-0 select-none">
+                          {task.item?.icon || (task.item?.subItems && task.item.subItems.length > 0 ? '📁' : '📄')}
+                        </span>
                         <span className="font-semibold text-slate-950">
                           {task.title}
                         </span>
@@ -1697,11 +1702,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         )}
                       </div>
                     </div>
-                    {isCompleted ? (
-                      <Check className="w-3.5 h-3.5 text-slate-950 shrink-0 stroke-[2.5]" />
-                    ) : (
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${statusConfig.dotBg}`} />
-                    )}
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${statusConfig.dotBg}`} />
                   </div>
                 );
               })}

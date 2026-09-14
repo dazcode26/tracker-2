@@ -897,19 +897,22 @@ export const GanttView: React.FC<GanttViewProps> = ({
                         style={{ color: row.project.color || '#f97316' }}
                       />
                     ) : (
-                      <div
-                        className={`w-2 h-2 rounded-full shrink-0 ${statusStyle.bg}`}
-                        title={`Status: ${row.status}`}
-                      />
+                      <>
+                        <span className="text-xs shrink-0 select-none">
+                          {row.item?.icon || (row.hasChildren ? '📁' : '📄')}
+                        </span>
+                        <div
+                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusStyle.bg}`}
+                          title={`Status: ${row.status}`}
+                        />
+                      </>
                     )}
 
                     <span
                       className={`truncate leading-snug ${
                         row.isProject
                           ? 'text-[#f4f4f5] text-xs font-bold'
-                          : row.status === 'completed'
-                          ? 'text-[#71717a]'
-                          : 'text-[#e4e4e7]'
+                          : 'text-[#f4f4f5] text-sm font-medium'
                       }`}
                       title={row.title}
                     >
@@ -994,10 +997,11 @@ export const GanttView: React.FC<GanttViewProps> = ({
               {/* Vertical Today Line */}
               {todayPosition !== null && (
                 <div
-                  className="absolute top-0 bottom-0 z-15 pointer-events-none border-l-2 border-dashed border-red-500"
+                  className="absolute top-0 bottom-0 z-15 pointer-events-none border-l-2 border-blue-500"
                   style={{ left: `${todayPosition}%` }}
                 >
-                  <span className="absolute top-1 -left-4 px-1 py-0.2 bg-red-500 text-white rounded text-[9px] font-bold tracking-tight shadow-md">
+                  <div className="w-2.5 h-2.5 rounded-full bg-blue-500 -ml-[5px] -mt-1 shadow-sm" />
+                  <span className="absolute top-2 -left-3.5 px-1.5 py-0.5 bg-blue-500 text-white rounded text-[9px] font-sans font-bold tracking-tight shadow-md select-none">
                     Today
                   </span>
                 </div>

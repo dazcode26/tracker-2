@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Play, Square, MoreHorizontal, Clock, User, ArrowRight, ArrowLeft, ArrowUp, ArrowDown, Copy, Check, ChevronRight, ChevronDown, Target, Folder, Search, X, Plus, Trash2, Edit2 } from 'lucide-react';
+import { Play, Square, Clock, User, ShieldCheck, ChevronRight, ChevronDown, Target, Folder, Search, X, Plus } from 'lucide-react';
 import { StructureToolbar } from './StructureToolbar';
 import { PortalMenu } from './PortalMenu';
 import { AppData, ItemNode, ItemStatus, ProjectNode } from '../types';
-import { getLeafFlatItems, formatDuration, getItemLoggedSeconds, getStatusConfig } from '../utils/treeUtils';
+import { getLeafFlatItems, formatDuration, getItemLoggedSeconds, getStatusConfig, updateItemInProjects } from '../utils/treeUtils';
 import { TreeSortBy, TreeSortDirection, compareItems } from '../utils/treeSorting';
 
 interface MenuAnchorState {
@@ -59,6 +59,7 @@ interface KanbanViewProps {
     newStatus?: ItemStatus
   ) => void;
   onDeleteItem?: (itemId: string) => void;
+  onSaveData?: (newData: AppData) => void;
   selectedProjectId?: string;
   onSelectProjectFilter?: (projectId: string) => void;
   selectedPersonId?: string;
@@ -83,6 +84,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   onReorderItem,
   onReorderOrMoveItem,
   onDeleteItem,
+  onSaveData,
   selectedProjectId = 'all',
   onSelectProjectFilter,
   selectedPersonId = 'all',
@@ -95,7 +97,8 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   onToggleSortDirection: externalOnToggleSortDirection,
 }) => {
   const [activeStatusAnchor, setActiveStatusAnchor] = useState<MenuAnchorState | null>(null);
-  const [activeTaskMenuAnchor, setActiveTaskMenuAnchor] = useState<MenuAnchorState | null>(null);
+  const [activeAssigneeAnchor, setActiveAssigneeAnchor] = useState<MenuAnchorState | null>(null);
+  const [activeReviewerAnchor, setActiveReviewerAnchor] = useState<MenuAnchorState | null>(null);
 
   // Drag and Drop state
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
@@ -111,7 +114,8 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setActiveStatusAnchor(null);
-        setActiveTaskMenuAnchor(null);
+        setActiveAssigneeAnchor(null);
+        setActiveReviewerAnchor(null);
       }
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -184,6 +188,28 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     }
   };
 
+  const handleSetAssignee = (itemId: string, assigneeId: string | null) => {
+    if (onSaveData) {
+      const updatedProjects = updateItemInProjects(appData.projects, itemId, (item) => ({
+        ...item,
+        assigneeId: assigneeId || undefined,
+      }));
+      onSaveData({ ...appData, projects: updatedProjects });
+    }
+    setActiveAssigneeAnchor(null);
+  };
+
+  const handleSetReviewer = (itemId: string, reviewerId: string | null) => {
+    if (onSaveData) {
+      const updatedProjects = updateItemInProjects(appData.projects, itemId, (item) => ({
+        ...item,
+        reviewerId: reviewerId || undefined,
+      }));
+      onSaveData({ ...appData, projects: updatedProjects });
+    }
+    setActiveReviewerAnchor(null);
+  };
+
   const activeProjects = appData.projects.filter((p) => p.status === 'active');
   const allFlatItems = getLeafFlatItems(activeProjects);
   const activeTimer = appData.settings.activeTimer;
@@ -241,16 +267,12 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     };
   };
 
-  const renderBreadcrumbs = (parentPath: string[], projectTitle: string, projectColor?: string) => {
+  const renderBreadcrumbs = (parentPath: string[], projectTitle: string) => {
     const effectivePath = parentPath && parentPath.length > 0 ? parentPath : [projectTitle];
     const fullPathStr = effectivePath.join(' > ');
 
     return (
-      <div className="flex items-center gap-1 text-[10px] font-mono min-w-0 flex-wrap" title={`Full Path: ${fullPathStr}`}>
-        <span
-          className="w-2 h-2 rounded-full shrink-0 border border-black/20 shadow-xs"
-          style={{ backgroundColor: projectColor || 'var(--accent-main, #f97316)' }}
-        />
+      <div className="flex items-center gap-1 text-[11px] font-normal min-w-0 flex-wrap" title={`Full Path: ${fullPathStr}`}>
         {effectivePath.map((seg, sIdx) => (
           <React.Fragment key={sIdx}>
             {sIdx > 0 && (
@@ -261,10 +283,10 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             <span
               className={
                 sIdx === 0
-                  ? 'text-slate-950 font-bold truncate'
+                  ? 'text-slate-950 font-normal truncate'
                   : sIdx === effectivePath.length - 1
-                  ? 'text-slate-800 font-semibold truncate'
-                  : 'text-slate-600 truncate'
+                  ? 'text-slate-800 font-normal truncate'
+                  : 'text-slate-600 font-normal truncate'
               }
             >
               {seg}
@@ -470,195 +492,31 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                             : ''
                         }`}
                       >
-                      {/* Top Header: Breadcrumb & More/Move Menu */}
-                      <div className="flex items-start justify-between gap-2 min-w-0">
-                        <div className="min-w-0 flex-1">
-                          {renderBreadcrumbs(parentPath, project.title, project.color)}
-                        </div>
-
-                        {/* Card Actions / Move Dropdown */}
-                        <div className="relative shrink-0" data-popover-root>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveTaskMenuAnchor(
-                                activeTaskMenuAnchor?.id === item.id
-                                  ? null
-                                  : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
-                              );
-                            }}
-                            className="p-1 rounded-md transition-colors cursor-pointer text-slate-700 hover:text-slate-950 hover:bg-black/10"
-                            title="Task Actions & Move"
-                          >
-                            <MoreHorizontal className="w-3.5 h-3.5" />
-                          </button>
-
-                          <PortalMenu
-                            isOpen={activeTaskMenuAnchor?.id === item.id}
-                            onClose={() => setActiveTaskMenuAnchor(null)}
-                            anchorRect={activeTaskMenuAnchor?.id === item.id ? activeTaskMenuAnchor.rect : null}
-                            triggerElement={activeTaskMenuAnchor?.id === item.id ? activeTaskMenuAnchor.el : null}
-                            align="right"
-                            className="w-44 flex flex-col gap-0.5 p-1"
-                          >
-                            {/* Move Left */}
-                            {col.status !== 'not-started' && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const curIdx = STATUS_SEQUENCE.indexOf(item.status);
-                                  if (curIdx > 0) {
-                                    onUpdateItemStatus(item.id, STATUS_SEQUENCE[curIdx - 1]);
-                                  }
-                                  setActiveTaskMenuAnchor(null);
-                                }}
-                                className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-[#f4f4f5] hover:bg-[#27272a] cursor-pointer text-left transition-colors"
-                              >
-                                <ArrowLeft className="w-3.5 h-3.5 text-[#a1a1aa]" />
-                                <span>Move Left</span>
-                              </button>
-                            )}
-
-                            {/* Move Right */}
-                            {col.status !== 'completed' && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const curIdx = STATUS_SEQUENCE.indexOf(item.status);
-                                  if (curIdx >= 0 && curIdx < STATUS_SEQUENCE.length - 1) {
-                                    onUpdateItemStatus(item.id, STATUS_SEQUENCE[curIdx + 1]);
-                                  }
-                                  setActiveTaskMenuAnchor(null);
-                                }}
-                                className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-[#f4f4f5] hover:bg-[#27272a] cursor-pointer text-left transition-colors"
-                              >
-                                <ArrowRight className="w-3.5 h-3.5 text-[#a1a1aa]" />
-                                <span>Move Right</span>
-                              </button>
-                            )}
-
-                            {/* Move Up */}
-                            {(onReorderOrMoveItem || onReorderItem) && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveTaskMenuAnchor(null);
-                                  if (onReorderOrMoveItem) {
-                                    const currentIdx = colItems.findIndex((ci) => ci.item.id === item.id);
-                                    if (currentIdx > 0) {
-                                      const prevItem = colItems[currentIdx - 1].item;
-                                      onReorderOrMoveItem(item.id, prevItem.id, 'before', col.status);
-                                    }
-                                  } else if (onReorderItem) {
-                                    onReorderItem(item.id, 'up');
-                                  }
-                                }}
-                                className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-[#f4f4f5] hover:bg-[#27272a] cursor-pointer text-left transition-colors"
-                              >
-                                <ArrowUp className="w-3.5 h-3.5 text-[#a1a1aa]" />
-                                <span>Move Up</span>
-                              </button>
-                            )}
-
-                            {/* Move Down */}
-                            {(onReorderOrMoveItem || onReorderItem) && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveTaskMenuAnchor(null);
-                                  if (onReorderOrMoveItem) {
-                                    const currentIdx = colItems.findIndex((ci) => ci.item.id === item.id);
-                                    if (currentIdx >= 0 && currentIdx < colItems.length - 1) {
-                                      const nextItem = colItems[currentIdx + 1].item;
-                                      onReorderOrMoveItem(item.id, nextItem.id, 'after', col.status);
-                                    }
-                                  } else if (onReorderItem) {
-                                    onReorderItem(item.id, 'down');
-                                  }
-                                }}
-                                className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-[#f4f4f5] hover:bg-[#27272a] cursor-pointer text-left transition-colors"
-                              >
-                                <ArrowDown className="w-3.5 h-3.5 text-[#a1a1aa]" />
-                                <span>Move Down</span>
-                              </button>
-                            )}
-
-                            <div className="my-1 border-t border-[#27272a]" />
-
-                            {/* Edit */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveTaskMenuAnchor(null);
-                                onOpenEditItemModal(item);
-                              }}
-                              className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-[#f4f4f5] hover:bg-[#27272a] cursor-pointer text-left transition-colors"
-                            >
-                              <Edit2 className="w-3.5 h-3.5 text-[#a1a1aa]" />
-                              <span>Edit Details</span>
-                            </button>
-
-                            {/* Duplicate */}
-                            {onDuplicateItem && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveTaskMenuAnchor(null);
-                                  onDuplicateItem(item.id);
-                                }}
-                                className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-[#f4f4f5] hover:bg-[#27272a] cursor-pointer text-left transition-colors"
-                              >
-                                <Copy className="w-3.5 h-3.5 text-[#a1a1aa]" />
-                                <span>Duplicate</span>
-                              </button>
-                            )}
-
-                            {/* Delete */}
-                            {onDeleteItem && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveTaskMenuAnchor(null);
-                                  onDeleteItem(item.id);
-                                }}
-                                className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-rose-400 hover:bg-rose-500/10 cursor-pointer text-left transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                                <span>Delete Task</span>
-                              </button>
-                            )}
-                          </PortalMenu>
-                        </div>
+                      {/* Top Header: Breadcrumb */}
+                      <div className="w-full min-w-0">
+                        {renderBreadcrumbs(parentPath, project.title)}
                       </div>
 
-                      {/* Title */}
-                      <h4
-                        className={`text-xs font-bold transition-colors line-clamp-2 flex items-center gap-1.5 no-underline ${
-                          item.status === 'completed'
-                            ? 'text-slate-400 line-through'
-                            : 'text-slate-950'
-                        }`}
-                      >
-                        {item.status === 'completed' && (
-                          <Check className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5] shrink-0" />
-                        )}
-                        <span>{item.name}</span>
-                      </h4>
+                      {/* Title & Notes - matching Tree view layout with icon on left of both texts */}
+                      <div className="flex items-start gap-2 min-w-0">
+                        <span className="text-sm shrink-0 select-none mt-0.5 leading-none">
+                          {item.icon || (item.subItems && item.subItems.length > 0 ? '📁' : '📄')}
+                        </span>
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <h4 className="text-sm font-medium transition-colors line-clamp-2 no-underline text-[#f4f4f5] leading-snug">
+                            {item.name}
+                          </h4>
 
-                      {/* Notes snippet if present */}
-                      {item.notes && (
-                        <p className="text-[11px] line-clamp-2 no-underline text-slate-700 font-normal">
-                          {item.notes}
-                        </p>
-                      )}
+                          {item.notes && item.notes.trim().length > 0 && (
+                            <p
+                              className="text-[11px] line-clamp-2 no-underline text-[#71717a] font-normal mt-0.5 leading-tight"
+                              title={item.notes}
+                            >
+                              {item.notes}
+                            </p>
+                          )}
+                        </div>
+                      </div>
 
                       {/* Time Progress Bar */}
                       {estSecs > 0 && (
@@ -681,41 +539,167 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       {/* Card Footer: Assignee & Timer & Status Action */}
                       <div className="pt-1 flex items-center justify-between">
                         {/* Assignee & Reviewer Avatar */}
-                        <div className="flex items-center gap-1.5">
-                          {assignee ? (
-                            <img
-                              src={assignee.avatar}
-                              alt={assignee.name}
-                              className="w-5 h-5 rounded-full object-cover border border-black/20"
-                              title={`Penerima: ${assignee.name}`}
-                            />
-                          ) : (
-                            <User className="w-4 h-4 text-slate-600" />
-                          )}
+                        <div className="flex items-center gap-1.5 h-6">
+                          {/* Assignee Button & Droplist */}
+                          <div className="relative shrink-0 flex items-center" data-popover-root>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveAssigneeAnchor(
+                                  activeAssigneeAnchor?.id === item.id
+                                    ? null
+                                    : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                                );
+                              }}
+                              className="flex items-center justify-center hover:opacity-80 cursor-pointer transition-all rounded-full"
+                              title={assignee ? `Penerima: ${assignee.name} (Klik untuk mengganti)` : 'Belum ditugaskan (Klik untuk memilih)'}
+                            >
+                              {assignee ? (
+                                <img
+                                  src={assignee.avatar}
+                                  alt={assignee.name}
+                                  className="w-6 h-6 rounded-full object-cover border border-black/20 shrink-0"
+                                />
+                              ) : (
+                                <div className="w-6 h-6 rounded-full flex items-center justify-center text-slate-600 border border-black/20 hover:bg-black/10 shrink-0 transition-colors">
+                                  <User className="w-3.5 h-3.5" />
+                                </div>
+                              )}
+                            </button>
 
-                          {reviewer && (
-                            <div className="relative group/rev" title={`Peninjau: ${reviewer.name}`}>
-                              <img
-                                src={reviewer.avatar}
-                                alt={reviewer.name}
-                                className="w-5 h-5 rounded-full object-cover border border-amber-600/80 ring-1 ring-amber-500/40"
-                              />
-                              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500 border border-white" />
-                            </div>
-                          )}
+                            <PortalMenu
+                              isOpen={activeAssigneeAnchor?.id === item.id}
+                              onClose={() => setActiveAssigneeAnchor(null)}
+                              anchorRect={activeAssigneeAnchor?.id === item.id ? activeAssigneeAnchor.rect : null}
+                              triggerElement={activeAssigneeAnchor?.id === item.id ? activeAssigneeAnchor.el : null}
+                              align="left"
+                              className="w-48 flex flex-col gap-0.5 p-1"
+                            >
+                              <div className="px-2 py-1 text-[10px] uppercase font-bold text-[#71717a]">
+                                Tugaskan Anggota
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSetAssignee(item.id, null);
+                                }}
+                                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#71717a] hover:text-[#f4f4f5] cursor-pointer text-left transition-colors"
+                              >
+                                <User className="w-4 h-4" />
+                                <span>Belum ditugaskan</span>
+                              </button>
+                              {(appData.persons || []).map((person) => (
+                                <button
+                                  key={person.id}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSetAssignee(item.id, person.id);
+                                  }}
+                                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
+                                    item.assigneeId === person.id ? 'font-semibold bg-[#27272a]' : ''
+                                  }`}
+                                >
+                                  <img src={person.avatar} alt={person.name} className="w-5 h-5 rounded-full object-cover" />
+                                  <div className="flex-1 truncate">
+                                    <div className="truncate">{person.name}</div>
+                                    <div className="text-[10px] text-[#71717a] truncate">{person.role}</div>
+                                  </div>
+                                </button>
+                              ))}
+                            </PortalMenu>
+                          </div>
+
+                          {/* Reviewer Button & Droplist */}
+                          <div className="relative shrink-0 flex items-center" data-popover-root>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveReviewerAnchor(
+                                  activeReviewerAnchor?.id === item.id
+                                    ? null
+                                    : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
+                                );
+                              }}
+                              className="flex items-center justify-center hover:opacity-80 cursor-pointer transition-all rounded-full"
+                              title={reviewer ? `Peninjau: ${reviewer.name} (Klik untuk mengganti)` : 'Tambah Peninjau (Klik untuk memilih)'}
+                            >
+                              {reviewer ? (
+                                <img
+                                  src={reviewer.avatar}
+                                  alt={reviewer.name}
+                                  className="w-6 h-6 rounded-full object-cover shrink-0"
+                                  style={{ borderColor: 'var(--accent-main)', borderWidth: '2px', borderStyle: 'solid' }}
+                                />
+                              ) : (
+                                <div
+                                  className="w-6 h-6 rounded-full border border-dashed border-black/25 hover:border-black/50 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors shrink-0"
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5" />
+                                </div>
+                              )}
+                            </button>
+
+                            <PortalMenu
+                              isOpen={activeReviewerAnchor?.id === item.id}
+                              onClose={() => setActiveReviewerAnchor(null)}
+                              anchorRect={activeReviewerAnchor?.id === item.id ? activeReviewerAnchor.rect : null}
+                              triggerElement={activeReviewerAnchor?.id === item.id ? activeReviewerAnchor.el : null}
+                              align="left"
+                              className="w-48 flex flex-col gap-0.5 p-1"
+                            >
+                              <div className="px-2 py-1 text-[10px] uppercase font-bold text-[#71717a]">
+                                Pilih Peninjau (Reviewer)
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSetReviewer(item.id, null);
+                                }}
+                                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#71717a] hover:text-[#f4f4f5] cursor-pointer text-left transition-colors"
+                              >
+                                <ShieldCheck className="w-4 h-4" />
+                                <span>Tidak ada</span>
+                              </button>
+                              {(appData.persons || []).map((person) => (
+                                <button
+                                  key={person.id}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSetReviewer(item.id, person.id);
+                                  }}
+                                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#27272a] text-[#f4f4f5] cursor-pointer text-left transition-colors ${
+                                    item.reviewerId === person.id ? 'font-semibold bg-[#27272a]' : ''
+                                  }`}
+                                >
+                                  <img src={person.avatar} alt={person.name} className="w-5 h-5 rounded-full object-cover" />
+                                  <div className="flex-1 truncate">
+                                    <div className="truncate">{person.name}</div>
+                                    <div className="text-[10px] text-[#71717a] truncate">{person.role}</div>
+                                  </div>
+                                </button>
+                              ))}
+                            </PortalMenu>
+                          </div>
                         </div>
 
-                        {/* Quick Move Status / Timer */}
-                        <div className="flex items-center gap-1.5">
+                        {/* Quick Move Status / Timer & Actions */}
+                        <div className="flex items-center gap-1.5 h-6">
                           {isRunning ? (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onStopTimer();
                               }}
-                              className="bg-[#ef4444] text-white p-1 rounded-full text-[10px] flex items-center gap-1 px-2 font-mono shadow-sm cursor-pointer hover:bg-red-600 transition-colors"
+                              className="h-6 px-2.5 rounded-full bg-[#ef4444] text-white text-[11px] font-medium flex items-center justify-center gap-1 cursor-pointer hover:bg-red-600 transition-colors shrink-0"
                             >
-                              <Square className="w-3 h-3 fill-current" /> Stop
+                              <Square className="w-2.5 h-2.5 fill-current" />
+                              <span className="leading-none">Stop</span>
                             </button>
                           ) : (
                             <button
@@ -723,15 +707,15 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                                 e.stopPropagation();
                                 onStartTimer(item.id);
                               }}
-                              className="p-1.5 rounded-full transition-all cursor-pointer bg-white hover:bg-zinc-100 text-black shadow-xs hover:scale-105 active:scale-95 flex items-center justify-center shrink-0"
+                              className="w-6 h-6 rounded-full transition-all cursor-pointer bg-white hover:bg-zinc-100 text-black hover:scale-105 active:scale-95 flex items-center justify-center shrink-0"
                               title="Start Timer"
                             >
-                              <Play className="w-3 h-3 fill-black text-black" />
+                              <Play className="w-2.5 h-2.5 fill-black text-black ml-0.5" />
                             </button>
                           )}
 
                           {/* Quick Change Status Pill Dropdown (Notion View style) */}
-                          <div className="relative" data-popover-root>
+                          <div className="relative shrink-0 flex items-center" data-popover-root>
                             <button
                               type="button"
                               onClick={(e) => {
@@ -742,13 +726,13 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                                     : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
                                 );
                               }}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold cursor-pointer transition-all hover:bg-zinc-100 bg-white text-zinc-900 shadow-xs select-none border-0"
+                              className="h-6 inline-flex items-center gap-1.5 px-2.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:bg-zinc-100 bg-white text-zinc-900 select-none border-0 shrink-0"
                               title="Click to change task status"
                             >
                               <span
-                                className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotBg}`}
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusCfg.dotBg}`}
                               />
-                              <span className="capitalize whitespace-nowrap text-zinc-900 font-medium">{statusCfg.label}</span>
+                              <span className="capitalize whitespace-nowrap text-zinc-900 font-medium leading-none">{statusCfg.label}</span>
                             </button>
 
                             {/* Status Dropdown Popover matching Notion View */}

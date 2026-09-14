@@ -327,9 +327,9 @@ export const TreeView: React.FC<TreeViewProps> = ({
   const renderStatusBadge = (status: ItemStatus) => {
     const config = getStatusConfig(status);
     return (
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${config.badgeBorder} ${config.badgeBg} ${config.textColor}`}>
+      <span className="h-6 inline-flex items-center gap-1.5 px-2.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:bg-zinc-100 bg-white text-zinc-900 select-none border-0 shrink-0">
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${config.dotBg}`} />
-        <span className="capitalize whitespace-nowrap">{config.label}</span>
+        <span className="capitalize whitespace-nowrap text-zinc-900 font-medium leading-none">{config.label}</span>
       </span>
     );
   };
@@ -432,7 +432,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
     return (
       <React.Fragment key={item.id}>
         <div
-          className={`group flex items-center border-b border-[#27272a] hover:bg-[#18181b]/70 transition-colors text-sm text-[#f4f4f5] select-none min-h-[40px] relative ${
+          className={`group flex items-center border-b border-[#27272a] hover:bg-[#18181b]/70 transition-colors text-sm text-[#f4f4f5] select-none min-h-[40px] relative w-full ${
             isTimerRunning ? 'bg-orange-500/10' : ''
           }`}
         >
@@ -521,9 +521,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
             >
               <div className="flex items-center gap-1.5 min-w-0">
                 <span
-                  className={`truncate group-hover/title:text-white transition-colors text-sm font-normal ${
-                    isCompleted ? 'text-[#71717a]' : 'text-[#f4f4f5]'
-                  }`}
+                  className="truncate group-hover/title:text-white transition-colors text-sm font-medium text-[#f4f4f5]"
                 >
                   {item.name}
                 </span>
@@ -567,7 +565,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
 
           {/* Column 2: STATUS */}
           <div
-            className="w-[140px] min-w-[140px] px-2 xl:px-3 shrink-0 relative"
+            className="w-[115px] min-w-[115px] px-1 xl:px-2 shrink-0 relative"
             data-popover-root
           >
               <button
@@ -734,7 +732,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
 
           {/* Column 5: ASSIGNEE (A) */}
           <div
-            className="w-[48px] min-w-[48px] px-1 shrink-0 flex items-center justify-center relative"
+            className="w-[30px] min-w-[30px] px-0 shrink-0 flex items-center justify-center relative"
             data-popover-root
           >
             <button
@@ -809,7 +807,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
 
           {/* Column 6: REVIEWER (R) */}
           <div
-            className="w-[48px] min-w-[48px] px-1 shrink-0 flex items-center justify-center relative"
+            className="w-[30px] min-w-[30px] px-0 shrink-0 flex items-center justify-center relative"
             data-popover-root
           >
             <button
@@ -829,10 +827,11 @@ export const TreeView: React.FC<TreeViewProps> = ({
                 <img
                   src={reviewer.avatar}
                   alt={`Reviewer: ${reviewer.name}`}
-                  className="w-6 h-6 rounded-full object-cover border border-amber-400 ring-1 ring-amber-400/50 shrink-0"
+                  className="w-6 h-6 rounded-full object-cover shrink-0"
+                  style={{ borderColor: 'var(--accent-main)', borderWidth: '2px', borderStyle: 'solid' }}
                 />
               ) : (
-                <div className="w-6 h-6 rounded-full bg-[#27272a] border border-[#3f3f46] border-dashed flex items-center justify-center text-[#71717a] hover:text-amber-400 hover:border-amber-400/50 transition-colors shrink-0">
+                <div className="w-6 h-6 rounded-full bg-[#27272a] border border-[#3f3f46] border-dashed flex items-center justify-center text-[#71717a] hover:text-[#f4f4f5] transition-colors shrink-0">
                   <ShieldCheck className="w-3.5 h-3.5" />
                 </div>
               )}
@@ -884,7 +883,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
 
           {/* Column 7: TIMER */}
           <div
-            className="w-[130px] min-w-[130px] px-2 xl:px-3 shrink-0 flex items-center justify-end gap-2 xl:gap-3"
+            className="w-[155px] min-w-[155px] px-2 xl:px-3 shrink-0 flex items-center justify-end gap-2 xl:gap-3"
           >
               <span
                 className={`font-mono text-[11px] whitespace-nowrap shrink-0 ${
@@ -897,26 +896,27 @@ export const TreeView: React.FC<TreeViewProps> = ({
                 <button
                   type="button"
                   onClick={onStopTimer}
-                  className="w-6 h-6 rounded-full bg-orange-500 text-white hover:bg-orange-600 transition-colors flex items-center justify-center shadow-xs cursor-pointer shrink-0"
+                  className="h-6 px-2.5 rounded-full bg-[#ef4444] text-white text-[11px] font-medium flex items-center justify-center gap-1 cursor-pointer hover:bg-red-600 transition-colors shrink-0"
                   title="Stop timer"
                 >
-                  <Square className="w-3 h-3 fill-current" />
+                  <Square className="w-2.5 h-2.5 fill-current" />
+                  <span className="leading-none">Stop</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => onStartTimer(item.id)}
-                  className="w-6 h-6 rounded-full bg-[#27272a] text-[#a1a1aa] hover:text-orange-400 hover:bg-orange-500/20 transition-colors flex items-center justify-center cursor-pointer shrink-0"
+                  className="w-6 h-6 rounded-full transition-all cursor-pointer bg-white hover:bg-zinc-100 text-black hover:scale-105 active:scale-95 flex items-center justify-center shrink-0"
                   title="Start timer for this task"
                 >
-                  <Play className="w-3 h-3 fill-current ml-0.5" />
+                  <Play className="w-2.5 h-2.5 fill-black text-black ml-0.5" />
                 </button>
               )}
             </div>
 
           {/* Column 8: MORE */}
           <div
-            className="w-[55px] min-w-[55px] px-1 xl:px-2 shrink-0 flex items-center justify-center relative"
+            className="w-[36px] min-w-[36px] px-0 shrink-0 flex items-center justify-center relative"
             data-popover-root
           >
               <button
@@ -929,10 +929,10 @@ export const TreeView: React.FC<TreeViewProps> = ({
                       : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
                   );
                 }}
-                className="w-7 h-7 rounded hover:bg-[#27272a] text-[#71717a] hover:text-[#f4f4f5] flex items-center justify-center cursor-pointer transition-colors"
+                className="w-6 h-6 rounded-full transition-colors cursor-pointer text-[#71717a] hover:text-[#f4f4f5] hover:bg-[#27272a] flex items-center justify-center shrink-0"
                 title="Task options"
               >
-                <MoreHorizontal className="w-4 h-4" />
+                <MoreHorizontal className="w-3.5 h-3.5" />
               </button>
 
               {/* Context Menu Dropdown via Portal - Never clipped */}
@@ -1345,16 +1345,16 @@ export const TreeView: React.FC<TreeViewProps> = ({
 
               {/* UNBOXED TASK LIST TABLE (Consistent with Notion View layout & mobile/tablet rules) */}
               <div className="overflow-x-auto">
-                <div className="min-w-[720px] min-h-[140px] pb-4">
+                <div className="min-w-[880px] w-full min-h-[140px] pb-4">
                   {/* Table Column Headers */}
-                  <div className="flex items-center border-b border-[#27272a] text-[11px] font-semibold text-[#71717a] select-none py-2.5 px-1 tracking-wider uppercase">
+                  <div className="flex items-center border-b border-[#27272a] text-[11px] font-semibold text-[#71717a] select-none py-2.5 px-1 tracking-wider uppercase w-full">
                     {/* 1. Name */}
                     <div className="flex-1 min-w-[200px] pl-2 xl:pl-4 shrink-0 flex items-center">
                       <span>Name</span>
                     </div>
 
                     {/* 2. Status */}
-                    <div className="w-[140px] min-w-[140px] px-2 xl:px-3 shrink-0 flex items-center">
+                    <div className="w-[115px] min-w-[115px] px-1 xl:px-2 shrink-0 flex items-center">
                       <span>Status</span>
                     </div>
 
@@ -1369,24 +1369,18 @@ export const TreeView: React.FC<TreeViewProps> = ({
                     </div>
 
                     {/* 5. Assignee (A) */}
-                    <div className="w-[48px] min-w-[48px] px-1 shrink-0 flex items-center justify-center text-center" title="Assignee">
-                      <span>A</span>
-                    </div>
+                    <div className="w-[30px] min-w-[30px] px-0 shrink-0" title="Assignee" />
 
                     {/* 6. Reviewer (R) */}
-                    <div className="w-[48px] min-w-[48px] px-1 shrink-0 flex items-center justify-center text-center" title="Reviewer">
-                      <span>R</span>
-                    </div>
+                    <div className="w-[30px] min-w-[30px] px-0 shrink-0" title="Reviewer" />
 
                     {/* 7. Timer */}
-                    <div className="w-[130px] min-w-[130px] px-2 xl:px-3 shrink-0 flex items-center justify-end pr-2 xl:pr-3 text-right">
+                    <div className="w-[155px] min-w-[155px] px-2 xl:px-3 shrink-0 flex items-center justify-end pr-2 xl:pr-3 text-right">
                       <span>Timer</span>
                     </div>
 
                     {/* 8. More */}
-                    <div className="w-[55px] min-w-[55px] px-1 xl:px-2 shrink-0 flex items-center justify-center text-center">
-                      <span>Actions</span>
-                    </div>
+                    <div className="w-[36px] min-w-[36px] px-0 shrink-0" title="Actions" />
                   </div>
 
                   {/* Tree Body */}

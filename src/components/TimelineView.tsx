@@ -48,6 +48,37 @@ interface RealizationSegment {
 
 const ONE_HOUR_MS = 60 * 60 * 1000; // 1-hour tolerance for merging nearby session bars (3,600,000 ms)
 
+// Helper to generate solid (opaque) 20% tint of a hex color blended onto white (#ffffff)
+const getSolid20PercentTint = (hex?: string): string => {
+  if (!hex || !hex.startsWith('#')) return '#f3f4f6';
+  const c = hex.replace('#', '');
+  if (c.length !== 6 && c.length !== 3) return '#f3f4f6';
+  const full = c.length === 3 ? c.split('').map((x) => x + x).join('') : c;
+  const r = parseInt(full.substring(0, 2), 16);
+  const g = parseInt(full.substring(2, 4), 16);
+  const b = parseInt(full.substring(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return '#f3f4f6';
+  // 20% project color + 80% white (r: 255, g: 255, b: 255) - solid, zero transparency
+  const r20 = Math.round(r * 0.2 + 255 * 0.8);
+  const g20 = Math.round(g * 0.2 + 255 * 0.8);
+  const b20 = Math.round(b * 0.2 + 255 * 0.8);
+  return `rgb(${r20}, ${g20}, ${b20})`;
+};
+
+export const getTaskStatusPercentage = (item: ItemNode): number => {
+  if (item.status === 'completed') return 100;
+  if (item.subItems && item.subItems.length > 0) {
+    const leafTasks = getLeafFlatItems([{ id: 'temp', type: 'project-node', title: '', items: [item], status: 'active' }]);
+    if (leafTasks.length > 0) {
+      const doneCount = leafTasks.filter((t) => t.item.status === 'completed').length;
+      return Math.round((doneCount / leafTasks.length) * 100);
+    }
+  }
+  if (item.status === 'review') return 80;
+  if (item.status === 'in-progress') return 50;
+  return 0;
+};
+
 /**
  * Merges realization segments that overlap or have a gap of less than 1 hour (< 3,600,000 ms).
  */
@@ -102,7 +133,7 @@ export const mergeAdjacentSegments = (
 
 /**
  * Consolidates segments at day-level resolution for Month and Week views.
- * Snaps them completely to full day columns (no gaps within days, perfectly aligned with column boundaries).
+ * Merges overlapping or consecutive/adjacent day segments seamlessly.
  */
 export const consolidateDaySegments = (
   rawSegments: { seg: RealizationSegment; startCol: number; endCol: number }[],
@@ -122,8 +153,8 @@ export const consolidateDaySegments = (
 
   for (let i = 1; i < sorted.length; i++) {
     const next = sorted[i];
-    // If overlapping in the same day column(s)
-    if (next.startCol <= current.endCol) {
+    // If overlapping in the same day column(s) OR adjacent days (next.startCol <= current.endCol + 1)
+    if (next.startCol <= current.endCol + 1) {
       current.endCol = Math.max(current.endCol, next.endCol);
       mergedLoggedSec += next.seg.loggedSeconds;
       mergedCount += (next.seg.mergedCount || 1);
@@ -134,8 +165,10 @@ export const consolidateDaySegments = (
         maxEnd = next.seg.endDate;
       }
     } else {
-      const leftPct = (current.startCol / totalCols) * 100;
-      const widthPct = ((current.endCol - current.startCol + 1) / totalCols) * 100;
+      const spanCols = current.endCol - current.startCol + 1;
+      const spanWidthPct = (spanCols / totalCols) * 100;
+      const widthPct = spanWidthPct * 0.9;
+      const leftPct = (current.startCol / totalCols) * 100 + spanWidthPct * 0.05;
       result.push({
         seg: {
           ...current.seg,
@@ -157,8 +190,10 @@ export const consolidateDaySegments = (
     }
   }
 
-  const leftPct = (current.startCol / totalCols) * 100;
-  const widthPct = ((current.endCol - current.startCol + 1) / totalCols) * 100;
+  const spanCols = current.endCol - current.startCol + 1;
+  const spanWidthPct = (spanCols / totalCols) * 100;
+  const widthPct = spanWidthPct * 0.9;
+  const leftPct = (current.startCol / totalCols) * 100 + spanWidthPct * 0.05;
   result.push({
     seg: {
       ...current.seg,
@@ -311,8 +346,22 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
     }
   };
 
-  // Project collapse state in timeline
-  const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(new Set());
+  // Project collapse state in timeline (synced with localStorage)
+  const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(() => {
+    try {
+      const saved =
+        localStorage.getItem('struktur_timeline_collapsed_projects') ||
+        localStorage.getItem('tracker_timeline_collapsed_projects') ||
+        localStorage.getItem('struktur_tree_collapsed_projects');
+      if (saved) {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr)) return new Set(arr);
+      }
+    } catch {
+      // ignore
+    }
+    return new Set();
+  });
 
   const toggleProjectCollapse = (projectId: string) => {
     setCollapsedProjectIds((prev) => {
@@ -322,20 +371,35 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       } else {
         next.add(projectId);
       }
+      try {
+        const arr = Array.from(next);
+        localStorage.setItem('struktur_timeline_collapsed_projects', JSON.stringify(arr));
+        localStorage.setItem('tracker_timeline_collapsed_projects', JSON.stringify(arr));
+      } catch {}
       return next;
     });
   };
 
   // Expand / collapse all projects and tasks
   const handleExpandAll = () => {
-    setCollapsedProjectIds(new Set());
+    const nextSet = new Set<string>();
+    setCollapsedProjectIds(nextSet);
+    try {
+      localStorage.setItem('struktur_timeline_collapsed_projects', JSON.stringify([]));
+      localStorage.setItem('tracker_timeline_collapsed_projects', JSON.stringify([]));
+    } catch {}
     if (onSetAllExpand) {
       onSetAllExpand(true);
     }
   };
 
   const handleCollapseAll = () => {
-    setCollapsedProjectIds(new Set(activeProjects.map((p) => p.id)));
+    const nextSet = new Set(activeProjects.map((p) => p.id));
+    setCollapsedProjectIds(nextSet);
+    try {
+      localStorage.setItem('struktur_timeline_collapsed_projects', JSON.stringify(Array.from(nextSet)));
+      localStorage.setItem('tracker_timeline_collapsed_projects', JSON.stringify(Array.from(nextSet)));
+    } catch {}
     if (onSetAllExpand) {
       onSetAllExpand(false);
     }
@@ -775,6 +839,83 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
     setCurrentDate(new Date());
   };
 
+  // Current time state for live hour-sensitive today line
+  const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // 1. Month View Today position (% within the right grid)
+  const monthTodayPosition = useMemo(() => {
+    const now = currentTime;
+    const isThisMonth =
+      now.getFullYear() === currentYear && now.getMonth() === currentMonthIndex;
+    if (!isThisMonth) return null;
+
+    const totalCols = monthDaysArray.length;
+    if (totalCols === 0) return null;
+
+    const todayDay = now.getDate();
+    const colIdx = monthDaysArray.indexOf(todayDay);
+    if (colIdx === -1) return null; // e.g., weekend hidden
+
+    const dayFraction =
+      (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 86400;
+    return ((colIdx + dayFraction) / totalCols) * 100;
+  }, [currentTime, currentYear, currentMonthIndex, monthDaysArray]);
+
+  // 2. Week View Today position (% within the right grid)
+  const weekTodayPosition = useMemo(() => {
+    const now = currentTime;
+    const totalCols = weekDays.length;
+    if (totalCols === 0) return null;
+
+    const colIdx = weekDays.findIndex(
+      (d) =>
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+    );
+    if (colIdx === -1) return null; // not in current week or weekend hidden
+
+    const dayFraction =
+      (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 86400;
+    return ((colIdx + dayFraction) / totalCols) * 100;
+  }, [currentTime, weekDays]);
+
+  // 3. Day View Today position (% within the right grid)
+  const dayTodayPosition = useMemo(() => {
+    const now = currentTime;
+    const isThisDay =
+      now.getFullYear() === currentYear &&
+      now.getMonth() === currentMonthIndex &&
+      now.getDate() === currentDay;
+    if (!isThisDay) return null;
+
+    const nowMs = now.getTime();
+    if (nowMs < dayStartMs || nowMs > dayEndMs) return null;
+
+    return ((nowMs - dayStartMs) / totalDayMs) * 100;
+  }, [currentTime, currentYear, currentMonthIndex, currentDay, dayStartMs, dayEndMs, totalDayMs]);
+
+  // 4. Year View Today position (% within the right grid)
+  const yearTodayPosition = useMemo(() => {
+    const now = currentTime;
+    if (now.getFullYear() !== currentYear) return null;
+
+    const mIdx = now.getMonth();
+    const daysInThisMonth = new Date(currentYear, mIdx + 1, 0).getDate();
+    const dayFraction =
+      (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 86400;
+    const monthFraction = (now.getDate() - 1 + dayFraction) / daysInThisMonth;
+
+    return ((mIdx + monthFraction) / 12) * 100;
+  }, [currentTime, currentYear]);
+
   /**
    * Extracts distinct realization segments / individual session blocks for an item.
    * - When sub-tasks are expanded (isExpanded = true), child sessions are NOT duplicated
@@ -867,6 +1008,80 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
     return mergeAdjacentSegments(segments, ONE_HOUR_MS);
   };
 
+  /**
+   * Extracts aggregated realization segments for an entire project.
+   * When project is collapsed, this acts as the parent row aggregating all child tasks.
+   */
+  const getProjectRealizationSegments = (project: ProjectNode): RealizationSegment[] => {
+    const segments: RealizationSegment[] = [];
+    const activeTimerItemId = appData.settings.activeTimer?.itemId;
+    const activeTimerStartedAt = appData.settings.activeTimer?.startedAt;
+
+    const collectFromNode = (node: ItemNode) => {
+      const isLiveActive = activeTimerItemId === node.id && activeTimerStartedAt;
+      const directSessions: Session[] = Array.isArray(node.sessions) ? [...node.sessions] : [];
+
+      if (directSessions.length > 0 || isLiveActive) {
+        directSessions.forEach((s, idx) => {
+          const sStart = new Date(s.startedAt);
+          const isManualRange = s.type === 'manual-range' || (!s.loggedSeconds && s.endedAt && s.endedAt !== s.startedAt);
+          const sEnd = s.endedAt
+            ? new Date(s.endedAt)
+            : new Date(sStart.getTime() + (s.loggedSeconds || 0) * 1000);
+
+          if (!isNaN(sStart.getTime()) && !isNaN(sEnd.getTime())) {
+            segments.push({
+              id: s.id || `proj-sess-${project.id}-${node.id}-${idx}`,
+              startDate: sStart,
+              endDate: sEnd,
+              loggedSeconds: s.loggedSeconds || 0,
+              sessionTitle: `${node.name} (${s.title || (isManualRange ? 'Period' : 'Session')})`,
+              status: node.status,
+              isSession: !isManualRange,
+            });
+          }
+        });
+
+        if (isLiveActive) {
+          const now = new Date();
+          const start = new Date(activeTimerStartedAt);
+          const diffSec = Math.max(1, Math.floor((now.getTime() - start.getTime()) / 1000));
+          segments.push({
+            id: `live-timer-${node.id}`,
+            startDate: start,
+            endDate: now,
+            loggedSeconds: diffSec,
+            sessionTitle: `${node.name} (Active Live Timer)`,
+            status: 'in-progress',
+            isSession: true,
+          });
+        }
+      } else if (node.actualStartDate) {
+        const sStart = new Date(node.actualStartDate);
+        const sEnd = node.actualEndDate ? new Date(node.actualEndDate) : sStart;
+        if (!isNaN(sStart.getTime()) && !isNaN(sEnd.getTime())) {
+          segments.push({
+            id: `proj-manual-${project.id}-${node.id}`,
+            startDate: sStart,
+            endDate: sEnd,
+            loggedSeconds: 0,
+            sessionTitle: `${node.name} (Realization)`,
+            status: node.status,
+            isSession: false,
+          });
+        }
+      }
+
+      if (node.subItems && Array.isArray(node.subItems)) {
+        node.subItems.forEach(collectFromNode);
+      }
+    };
+
+    (project.items || []).forEach(collectFromNode);
+
+    return mergeAdjacentSegments(segments, ONE_HOUR_MS);
+  };
+
   // Active projects
   const activeProjects = appData.projects.filter((p) => p.status === 'active');
 
@@ -893,18 +1108,18 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
     );
   });
 
-  // Status color helper for realization bars
+  // Status color helper for realization bars (no border, no shadow)
   const getBarColor = (status: ItemStatus) => {
     if (status === 'completed') {
-      return 'bg-[#10b981] border-[#059669] text-white shadow-emerald-950/40';
+      return 'bg-[#10b981] text-white';
     }
     if (status === 'review') {
-      return 'bg-[#f59e0b] border-[#d97706] text-black font-semibold shadow-amber-950/40';
+      return 'bg-[#f59e0b] text-slate-950 font-bold';
     }
     if (status === 'in-progress') {
-      return 'bg-orange-500 border-orange-600 text-white shadow-orange-950/40';
+      return 'bg-orange-500 text-white';
     }
-    return 'bg-[#3f3f46] border-[#52525b] text-[#f4f4f5]';
+    return 'bg-[#3f3f46] text-[#f4f4f5]';
   };
 
   const formatD = (d: Date) =>
@@ -1054,15 +1269,46 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
         <div className="overflow-auto flex-1 min-h-0">
           {/* ================= 1. MONTH VIEW ================= */}
           {timeScale === 'month' && (
-            <div style={{ minWidth: `${440 + monthDaysArray.length * 34}px` }}>
+            <div className="relative" style={{ minWidth: `${280 + monthDaysArray.length * 34}px` }}>
+              {/* Vertical Today Line (Solid Blue, Hour-sensitive) */}
+              <div className="absolute top-0 bottom-0 right-0 left-[280px] pointer-events-none z-30">
+                {monthTodayPosition !== null && (
+                  <div
+                    className="absolute top-0 bottom-0 border-l-2 border-blue-500"
+                    style={{ left: `${monthTodayPosition}%` }}
+                  >
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 -ml-[5px] -mt-1 shadow-sm" />
+                    <span className="absolute top-2 -left-3.5 px-1.5 py-0.5 bg-blue-500 text-white rounded text-[9px] font-sans font-bold tracking-tight shadow-md select-none">
+                      Today
+                    </span>
+                  </div>
+                )}
+              </div>
+
               {/* Header Timeline Dates */}
-              <div className="grid grid-cols-[420px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs font-mono text-[#a1a1aa] sticky top-0 z-40">
-                <div className="sticky left-0 z-50 bg-[#18181b] p-3 font-bold border-r border-[#27272a] flex items-center justify-between shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
-                  <span>Project & Task Hierarchy</span>
-                  <span className="text-[10px] text-[#71717a] font-normal">Realization Range</span>
+              <div className="grid grid-cols-[280px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs text-[#a1a1aa] sticky top-0 z-40">
+                <div className="sticky left-0 z-50 bg-[#18181b] px-3 py-2 font-sans border-r border-[#27272a] flex items-center justify-center shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
+                  <div className="flex items-center justify-center gap-1.5 w-full">
+                    <button
+                      type="button"
+                      onClick={handleExpandAll}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-sans font-medium text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a]/50 transition-colors cursor-pointer"
+                      title="Expand All"
+                    >
+                      Expand All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCollapseAll}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-sans font-medium text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a]/50 transition-colors cursor-pointer"
+                      title="Collapse All"
+                    >
+                      Collapse All
+                    </button>
+                  </div>
                 </div>
                 <div
-                  className="grid text-center divide-x divide-[#27272a] py-2"
+                  className="grid text-center divide-x divide-[#27272a] py-2 font-mono"
                   style={{ gridTemplateColumns: `repeat(${monthDaysArray.length}, minmax(32px, 1fr))` }}
                 >
                   {monthDaysArray.map((day) => {
@@ -1099,7 +1345,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
               </div>
 
               {/* Rows Grouped By Project */}
-              <div className="divide-y divide-[#27272a] text-xs">
+              <div className="text-xs">
                 {filteredProjects.map((project) => {
                   const isProjectCollapsed = collapsedProjectIds.has(project.id);
                   const leafTasks = getLeafFlatItems([project]);
@@ -1126,18 +1372,6 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                     }
                   }
 
-                  // Project month bar positioning (Day-snapped: full day columns)
-                  let projMonthBar: { leftPct: number; widthPct: number } | null = null;
-                  if (projMinDate) {
-                    const pStartDate = new Date(projMinDate);
-                    const pEndDate = projMaxDate ? new Date(projMaxDate) : new Date(projMinDate);
-
-                    const pStartMidnight = new Date(pStartDate.getFullYear(), pStartDate.getMonth(), pStartDate.getDate(), 0, 0, 0, 0).getTime();
-                    const pEndMidnight = new Date(pEndDate.getFullYear(), pEndDate.getMonth(), pEndDate.getDate(), 23, 59, 59, 999).getTime();
-
-                    projMonthBar = getMonthColSpan(pStartMidnight, pEndMidnight);
-                  }
-
                   const projectFlatItems = filterProjectFlatItems(getVisibleFlatItems([project]));
 
                   // If filterMode is realized-only, check if project or items have realization
@@ -1150,11 +1384,14 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                       {/* ===== PROJECT NODE ROW ===== */}
                       <div
                         id={`timeline-project-node-${project.id}`}
-                        className="grid grid-cols-[420px_1fr] bg-[#16161a] hover:bg-[#1a1a1f] transition-colors items-center group font-sans border-b border-[#27272a]"
+                        className="grid grid-cols-[280px_1fr] transition-colors group font-sans border-b border-[#27272a]"
                       >
                         {/* Left Column: Project Node Header (Month) */}
                         <div
-                          className="sticky left-0 z-30 bg-[#16161a] group-hover:bg-[#1a1a1f] p-2.5 font-bold border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none shadow-[4px_0_12px_rgba(0,0,0,0.45)]"
+                          style={{
+                            backgroundColor: getSolid20PercentTint(project.color || '#f97316'),
+                          }}
+                          className="sticky left-0 z-30 min-h-[44px] h-full p-2.5 font-bold border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none"
                           onClick={() => toggleProjectCollapse(project.id)}
                           title={`${isProjectCollapsed ? 'Expand' : 'Collapse'} project: ${project.title}`}
                         >
@@ -1165,50 +1402,31 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                 e.stopPropagation();
                                 toggleProjectCollapse(project.id);
                               }}
-                              className="p-0.5 rounded hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-colors shrink-0"
+                              className="p-0.5 rounded hover:bg-black/10 text-slate-700 hover:text-slate-950 transition-colors shrink-0"
                             >
                               {isProjectCollapsed ? (
-                                <ChevronRight className="w-4 h-4 text-orange-400" />
+                                <ChevronRight className="w-4 h-4 text-slate-800" />
                               ) : (
-                                <ChevronDown className="w-4 h-4 text-orange-400" />
+                                <ChevronDown className="w-4 h-4 text-slate-800" />
                               )}
                             </button>
 
-                            <span
-                              className="w-3 h-3 rounded-full shrink-0 shadow-sm ring-2 ring-white/10"
-                              style={{ backgroundColor: project.color || '#f97316' }}
-                            />
-
-                            <span className="truncate text-xs font-bold text-[#f4f4f5] tracking-tight group-hover:text-white">
+                            <span className="truncate text-xs font-bold text-slate-950 tracking-tight">
                               {project.title}
                             </span>
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0">
                             {projRealizationSummaryText ? (
-                              <span className="text-[10px] font-mono shrink-0 px-2 py-0.5 rounded bg-[#27272a] text-orange-300 border border-orange-500/30">
+                              <span className="text-[10px] font-mono shrink-0 px-2 py-0.5 rounded bg-black/10 text-slate-900 border border-black/15 font-semibold">
                                 {projRealizationSummaryText}
                               </span>
                             ) : null}
-
-                            {onOpenProjectModal && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpenProjectModal(project);
-                                }}
-                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-all"
-                                title="Project Settings"
-                              >
-                                <MoreHorizontal className="w-3.5 h-3.5" />
-                              </button>
-                            )}
                           </div>
                         </div>
 
                         {/* Right Column: Month Timeline Grid for Project Node */}
-                        <div className="relative py-2 px-1 h-11 flex items-center bg-[#141418]/60">
+                        <div className="relative py-2 px-1 min-h-[44px] h-full flex items-center bg-[#141418]/60">
                           {/* Background Grid Days */}
                           <div
                             className="absolute inset-0 grid h-full pointer-events-none"
@@ -1228,27 +1446,34 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                             })}
                           </div>
 
-                          {/* Project Summary Milestone Bar */}
-                          {projMonthBar && (
-                            <div
-                              style={{
-                                left: `${projMonthBar.leftPct}%`,
-                                width: `${projMonthBar.widthPct}%`,
-                                minWidth: '32px',
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (onOpenProjectModal) onOpenProjectModal(project);
-                              }}
-                              className="absolute h-6 rounded-md border border-orange-500/50 bg-gradient-to-r from-orange-500/25 via-amber-500/20 to-orange-500/25 px-2 flex items-center text-[10px] font-mono text-orange-200 shadow-md shadow-orange-950/20 cursor-pointer hover:brightness-125 select-none transition-all truncate z-10"
-                              title={`Project: ${project.title}${projRealizationSummaryText ? ` | ${projRealizationSummaryText}` : ''}`}
-                            >
-                              <span className="truncate flex items-center gap-1.5 font-sans font-bold text-orange-300">
-                                <Folder className="w-3 h-3 text-orange-400 shrink-0" />
-                                <span className="truncate">{project.title}</span>
-                              </span>
-                            </div>
-                          )}
+                          {/* When project is collapsed, render aggregated task realization cards (acts as parent task) */}
+                          {isProjectCollapsed && (() => {
+                            const projSegments = getProjectRealizationSegments(project);
+                            const rawProjMonthSegments = projSegments
+                              .map((seg) => {
+                                const segStartMidnight = new Date(seg.startDate.getFullYear(), seg.startDate.getMonth(), seg.startDate.getDate(), 0, 0, 0, 0).getTime();
+                                const segEndMidnight = new Date(seg.endDate.getFullYear(), seg.endDate.getMonth(), seg.endDate.getDate(), 23, 59, 59, 999).getTime();
+                                const span = getMonthColSpan(segStartMidnight, segEndMidnight);
+                                if (!span) return null;
+                                return { seg, startCol: span.startCol, endCol: span.endCol };
+                              })
+                              .filter(Boolean) as { seg: RealizationSegment; startCol: number; endCol: number }[];
+
+                            const projMonthSegments = consolidateDaySegments(rawProjMonthSegments, monthDaysArray.length);
+
+                            return projMonthSegments.map(({ seg, leftPct, widthPct }) => (
+                              <div
+                                key={seg.id}
+                                style={{
+                                  left: `${leftPct}%`,
+                                  width: `${widthPct}%`,
+                                  minWidth: '20px',
+                                }}
+                                className={`absolute h-6 rounded-full ${getBarColor(seg.status)} select-none transition-all truncate z-10 shadow-sm cursor-pointer hover:brightness-110`}
+                                title={`Project: ${project.title} | ${seg.sessionTitle || 'Realization'}: ${formatDuration(seg.loggedSeconds)} (${formatD(seg.startDate)}${seg.startDate.getTime() !== seg.endDate.getTime() ? ` - ${formatD(seg.endDate)}` : ''})`}
+                              />
+                            ));
+                          })()}
                         </div>
                       </div>
 
@@ -1285,30 +1510,17 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                           // Consolidate segments that overlap on the same day(s) into single full bars
                           const monthSegments = consolidateDaySegments(rawMonthSegments, monthDaysArray.length);
 
-                          const { minDate, maxDate } = hasChildren && isExpanded
-                            ? (item.actualStartDate ? { minDate: new Date(item.actualStartDate), maxDate: item.actualEndDate ? new Date(item.actualEndDate) : null } : { minDate: null, maxDate: null })
-                            : getRealizationDatesForTree(item);
-
-                          let realizationSummaryText = '';
-                          if (minDate) {
-                            if (maxDate && minDate.getTime() !== maxDate.getTime()) {
-                              realizationSummaryText = `${formatD(minDate)} - ${formatD(maxDate)}`;
-                            } else {
-                              realizationSummaryText = formatD(minDate);
-                            }
-                          }
-
                           const targetPinLeftPct = item.targetDate ? getMonthTargetPinLeftPct(item.targetDate) : null;
 
                           return (
                             <div
                               key={item.id}
-                              className="grid grid-cols-[420px_1fr] hover:bg-[#27272a]/30 transition-colors items-center group"
+                              className="grid grid-cols-[280px_1fr] hover:bg-[#27272a]/30 transition-colors group border-b border-[#27272a]"
                             >
                               {/* Left Column: Task Name Indented Under Project */}
                               <div
-                                style={{ paddingLeft: `${18 + depth * 14}px` }}
-                                className={`sticky left-0 z-30 bg-[#121215] group-hover:bg-[#18181c] p-2 font-medium border-r border-[#27272a] truncate flex items-center justify-between gap-1.5 pr-2.5 select-none shadow-[4px_0_12px_rgba(0,0,0,0.45)] ${
+                                style={{ paddingLeft: `${14 + depth * 12}px` }}
+                                className={`sticky left-0 z-30 bg-[#121215] group-hover:bg-[#18181c] min-h-[44px] h-full p-2.5 font-medium border-r border-[#27272a] truncate flex items-center justify-between gap-1.5 pr-2 select-none ${
                                   hasChildren ? 'cursor-pointer' : 'cursor-default'
                                 }`}
                                 onClick={() => {
@@ -1319,33 +1531,34 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                 title={hasChildren ? `${isExpanded ? 'Collapse' : 'Expand'} sub-tasks: ${item.name}` : undefined}
                               >
                                 <div className="flex items-center gap-1.5 min-w-0 truncate">
-                                  {hasChildren ? (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (onToggleExpand) onToggleExpand(item.id);
-                                      }}
-                                      className="p-0.5 rounded hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-colors shrink-0"
-                                    >
-                                      {isExpanded ? (
-                                        <ChevronDown className="w-3.5 h-3.5 text-orange-400" />
-                                      ) : (
-                                        <ChevronRight className="w-3.5 h-3.5 text-[#71717a]" />
-                                      )}
-                                    </button>
-                                  ) : (
-                                    <span className="w-3.5 h-3.5 flex items-center justify-center opacity-30 text-[10px] shrink-0">
-                                      •
-                                    </span>
-                                  )}
+                                  {/* Chevron / Bullet aligned with TreeView pattern */}
+                                  <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                                    {hasChildren ? (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (onToggleExpand) onToggleExpand(item.id);
+                                        }}
+                                        className="w-4 h-4 rounded flex items-center justify-center hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-colors shrink-0"
+                                      >
+                                        {isExpanded ? (
+                                          <ChevronDown className="w-3.5 h-3.5 text-orange-400" />
+                                        ) : (
+                                          <ChevronRight className="w-3.5 h-3.5 text-[#71717a]" />
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-[#3f3f46] inline-block" />
+                                    )}
+                                  </div>
 
-                                  <span
-                                    className="w-2 h-2 rounded-full shrink-0 shadow-sm"
-                                    style={{ backgroundColor: project.color || '#f97316' }}
-                                  />
-                                  {item.status === 'completed' && <Check className="w-3.5 h-3.5 text-[#10b981] shrink-0" />}
-                                  <span className={`truncate font-medium ${item.status === 'completed' ? 'text-[#71717a]' : (hasChildren ? 'text-[#f4f4f5] group-hover:text-white' : 'text-[#e4e4e7]')}`}>
+                                  {/* Task Icon / Emoji */}
+                                  <span className="text-xs shrink-0 select-none">
+                                    {item.icon || (hasChildren ? '📁' : '📄')}
+                                  </span>
+
+                                  <span className="truncate text-sm font-medium text-[#f4f4f5] group-hover:text-white">
                                     {item.name}
                                   </span>
 
@@ -1355,16 +1568,10 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                     </span>
                                   )}
                                 </div>
-
-                                {realizationSummaryText ? (
-                                  <span className="text-[10px] font-mono shrink-0 px-1.5 py-0.5 rounded bg-[#27272a] text-[#d4d4d8] border border-[#3f3f46]">
-                                    {realizationSummaryText}
-                                  </span>
-                                ) : null}
                               </div>
 
                               {/* Right Column: Month Timeline Grid */}
-                              <div className="relative py-2 px-1 h-11 flex items-center">
+                              <div className="relative py-2 px-1 min-h-[44px] h-full flex items-center">
                                 {/* Background Grid Days */}
                                 <div
                                   className="absolute inset-0 grid h-full pointer-events-none"
@@ -1408,23 +1615,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                     style={{
                                       left: `${leftPct}%`,
                                       width: `${widthPct}%`,
-                                      minWidth: '24px',
+                                      minWidth: '20px',
                                     }}
-                                    className={`absolute h-7 rounded-lg border ${getBarColor(seg.status)} px-2 flex items-center justify-between text-[10px] font-mono shadow-md cursor-pointer hover:brightness-110 select-none transition-all truncate z-10`}
-                                    title={`Click to edit task: ${item.name} | ${seg.sessionTitle || 'Realization'}: ${formatDuration(seg.loggedSeconds)} (${formatD(seg.startDate)}${seg.startDate.getTime() !== seg.endDate.getTime() ? ` - ${formatD(seg.endDate)}` : ''})`}
-                                  >
-                                    <span className="truncate flex items-center gap-1 font-sans font-medium">
-                                      {seg.status === 'completed' && <CheckCircle2 className="w-3 h-3 shrink-0" />}
-                                      <span className="truncate">{item.name}</span>
-                                      {((seg.mergedCount && seg.mergedCount > 1) || (monthSegments.length > 1 && seg.sessionTitle)) && (
-                                        <span className="opacity-80 text-[9px] font-mono shrink-0">({seg.sessionTitle})</span>
-                                      )}
-                                    </span>
-                                    <span className="shrink-0 text-[9px] opacity-90 pl-1 font-mono flex items-center gap-0.5">
-                                      <Clock className="w-2.5 h-2.5" />
-                                      {formatDuration(seg.loggedSeconds)}
-                                    </span>
-                                  </div>
+                                    className={`absolute h-6 rounded-full ${getBarColor(seg.status)} cursor-pointer hover:brightness-110 select-none transition-all truncate z-10 shadow-sm`}
+                                    title={`Click to edit task: ${item.name} (${getTaskStatusPercentage(item)}%) | ${seg.sessionTitle || 'Realization'}: ${formatDuration(seg.loggedSeconds)} (${formatD(seg.startDate)}${seg.startDate.getTime() !== seg.endDate.getTime() ? ` - ${formatD(seg.endDate)}` : ''})`}
+                                  />
                                 ))}
                               </div>
                             </div>
@@ -1439,15 +1634,46 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
 
           {/* ================= 2. WEEK VIEW (MONDAY - SUNDAY) ================= */}
           {timeScale === 'week' && (
-            <div style={{ minWidth: `${440 + weekDays.length * 110}px` }}>
+            <div className="relative" style={{ minWidth: `${280 + weekDays.length * 110}px` }}>
+              {/* Vertical Today Line (Solid Blue, Hour-sensitive) */}
+              <div className="absolute top-0 bottom-0 right-0 left-[280px] pointer-events-none z-30">
+                {weekTodayPosition !== null && (
+                  <div
+                    className="absolute top-0 bottom-0 border-l-2 border-blue-500"
+                    style={{ left: `${weekTodayPosition}%` }}
+                  >
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 -ml-[5px] -mt-1 shadow-sm" />
+                    <span className="absolute top-2 -left-3.5 px-1.5 py-0.5 bg-blue-500 text-white rounded text-[9px] font-sans font-bold tracking-tight shadow-md select-none">
+                      Today
+                    </span>
+                  </div>
+                )}
+              </div>
+
               {/* Header Days (Dynamic Monday - Sunday / Friday) */}
-              <div className="grid grid-cols-[420px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs font-mono text-[#a1a1aa] sticky top-0 z-40">
-                <div className="sticky left-0 z-50 bg-[#18181b] p-3 font-bold border-r border-[#27272a] flex items-center justify-between shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
-                  <span>Project & Task Hierarchy</span>
-                  <span className="text-[10px] text-[#71717a] font-normal">Realization Range</span>
+              <div className="grid grid-cols-[280px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs text-[#a1a1aa] sticky top-0 z-40">
+                <div className="sticky left-0 z-50 bg-[#18181b] px-3 py-2 font-sans border-r border-[#27272a] flex items-center justify-center shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
+                  <div className="flex items-center justify-center gap-1.5 w-full">
+                    <button
+                      type="button"
+                      onClick={handleExpandAll}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-sans font-medium text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a]/50 transition-colors cursor-pointer"
+                      title="Expand All"
+                    >
+                      Expand All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCollapseAll}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-sans font-medium text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a]/50 transition-colors cursor-pointer"
+                      title="Collapse All"
+                    >
+                      Collapse All
+                    </button>
+                  </div>
                 </div>
                 <div
-                  className="grid text-center divide-x divide-[#27272a] py-2"
+                  className="grid text-center divide-x divide-[#27272a] py-2 font-mono"
                   style={{ gridTemplateColumns: `repeat(${weekDays.length}, minmax(110px, 1fr))` }}
                 >
                   {weekDays.map((wDate, idx) => {
@@ -1482,8 +1708,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                 </div>
               </div>
 
-              {/* Rows for Week Grouped by Project */}
-              <div className="divide-y divide-[#27272a] text-xs">
+              {/* Rows for Week View Grouped by Project */}
+              <div className="text-xs">
                 {filteredProjects.map((project) => {
                   const isProjectCollapsed = collapsedProjectIds.has(project.id);
                   const leafTasks = getLeafFlatItems([project]);
@@ -1510,18 +1736,6 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                     }
                   }
 
-                  // Project week bar positioning (Day-snapped: full day columns)
-                  let projWeekBar: { leftPct: number; widthPct: number } | null = null;
-                  if (projMinDate) {
-                    const pStartDate = new Date(projMinDate);
-                    const pEndDate = projMaxDate ? new Date(projMaxDate) : new Date(projMinDate);
-
-                    const pStartMidnight = new Date(pStartDate.getFullYear(), pStartDate.getMonth(), pStartDate.getDate(), 0, 0, 0, 0).getTime();
-                    const pEndMidnight = new Date(pEndDate.getFullYear(), pEndDate.getMonth(), pEndDate.getDate(), 23, 59, 59, 999).getTime();
-
-                    projWeekBar = getWeekColSpan(pStartMidnight, pEndMidnight);
-                  }
-
                   const projectFlatItems = filterProjectFlatItems(getVisibleFlatItems([project]));
 
                   if (filterMode === 'realized-only' && !projMinDate && projectFlatItems.length === 0) {
@@ -1533,11 +1747,14 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                       {/* ===== PROJECT NODE ROW (WEEK) ===== */}
                       <div
                         id={`timeline-project-node-week-${project.id}`}
-                        className="grid grid-cols-[420px_1fr] bg-[#16161a] hover:bg-[#1a1a1f] transition-colors items-center group font-sans border-b border-[#27272a]"
+                        className="grid grid-cols-[280px_1fr] transition-colors group font-sans border-b border-[#27272a]"
                       >
                         {/* Left Column: Project Node Info */}
                         <div
-                          className="sticky left-0 z-30 bg-[#16161a] group-hover:bg-[#1a1a1f] p-2.5 font-bold border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none shadow-[4px_0_12px_rgba(0,0,0,0.45)]"
+                          style={{
+                            backgroundColor: getSolid20PercentTint(project.color || '#f97316'),
+                          }}
+                          className="sticky left-0 z-30 min-h-[44px] h-full p-2.5 font-bold border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none"
                           onClick={() => toggleProjectCollapse(project.id)}
                           title={`${isProjectCollapsed ? 'Expand' : 'Collapse'} project: ${project.title}`}
                         >
@@ -1548,50 +1765,31 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                 e.stopPropagation();
                                 toggleProjectCollapse(project.id);
                               }}
-                              className="p-0.5 rounded hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-colors shrink-0"
+                              className="p-0.5 rounded hover:bg-black/10 text-slate-700 hover:text-slate-950 transition-colors shrink-0"
                             >
                               {isProjectCollapsed ? (
-                                <ChevronRight className="w-4 h-4 text-orange-400" />
+                                <ChevronRight className="w-4 h-4 text-slate-800" />
                               ) : (
-                                <ChevronDown className="w-4 h-4 text-orange-400" />
+                                <ChevronDown className="w-4 h-4 text-slate-800" />
                               )}
                             </button>
 
-                            <span
-                              className="w-3 h-3 rounded-full shrink-0 shadow-sm ring-2 ring-white/10"
-                              style={{ backgroundColor: project.color || '#f97316' }}
-                            />
-
-                            <span className="truncate text-xs font-bold text-[#f4f4f5] tracking-tight group-hover:text-white">
+                            <span className="truncate text-xs font-bold text-slate-950 tracking-tight">
                               {project.title}
                             </span>
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0">
                             {projRealizationSummaryText ? (
-                              <span className="text-[10px] font-mono shrink-0 px-2 py-0.5 rounded bg-[#27272a] text-orange-300 border border-orange-500/30">
+                              <span className="text-[10px] font-mono shrink-0 px-2 py-0.5 rounded bg-black/10 text-slate-900 border border-black/15 font-semibold">
                                 {projRealizationSummaryText}
                               </span>
                             ) : null}
-
-                            {onOpenProjectModal && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpenProjectModal(project);
-                                }}
-                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-all"
-                                title="Project Settings"
-                              >
-                                <MoreHorizontal className="w-3.5 h-3.5" />
-                              </button>
-                            )}
                           </div>
                         </div>
 
                         {/* Right Column: Week Grid for Project Node */}
-                        <div className="relative py-2 px-1 h-12 flex items-center bg-[#141418]/60">
+                        <div className="relative py-2 px-1 min-h-[44px] h-full flex items-center bg-[#141418]/60">
                           {/* Background Grid */}
                           <div
                             className="absolute inset-0 grid h-full pointer-events-none"
@@ -1610,27 +1808,34 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                             })}
                           </div>
 
-                          {/* Project Summary Milestone Bar for Week */}
-                          {projWeekBar && (
-                            <div
-                              style={{
-                                left: `${projWeekBar.leftPct}%`,
-                                width: `${projWeekBar.widthPct}%`,
-                                minWidth: '36px',
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (onOpenProjectModal) onOpenProjectModal(project);
-                              }}
-                              className="absolute h-7 rounded-md border border-orange-500/50 bg-gradient-to-r from-orange-500/25 via-amber-500/20 to-orange-500/25 px-2 flex items-center text-[10px] font-mono text-orange-200 shadow-md shadow-orange-950/20 cursor-pointer hover:brightness-125 select-none transition-all truncate z-10"
-                              title={`Project: ${project.title}${projRealizationSummaryText ? ` | ${projRealizationSummaryText}` : ''}`}
-                            >
-                              <span className="truncate flex items-center gap-1.5 font-sans font-bold text-orange-300">
-                                <Folder className="w-3 h-3 text-orange-400 shrink-0" />
-                                <span className="truncate">{project.title}</span>
-                              </span>
-                            </div>
-                          )}
+                          {/* When project is collapsed, render aggregated task realization cards (acts as parent task) */}
+                          {isProjectCollapsed && (() => {
+                            const projSegments = getProjectRealizationSegments(project);
+                            const rawProjWeekSegments = projSegments
+                              .map((seg) => {
+                                const segStartDateMidnight = new Date(seg.startDate.getFullYear(), seg.startDate.getMonth(), seg.startDate.getDate(), 0, 0, 0, 0).getTime();
+                                const segEndDateMidnight = new Date(seg.endDate.getFullYear(), seg.endDate.getMonth(), seg.endDate.getDate(), 23, 59, 59, 999).getTime();
+                                const span = getWeekColSpan(segStartDateMidnight, segEndDateMidnight);
+                                if (!span) return null;
+                                return { seg, startCol: span.startCol, endCol: span.endCol };
+                              })
+                              .filter(Boolean) as { seg: RealizationSegment; startCol: number; endCol: number }[];
+
+                            const projWeekSegments = consolidateDaySegments(rawProjWeekSegments, weekDays.length);
+
+                            return projWeekSegments.map(({ seg, leftPct, widthPct }) => (
+                              <div
+                                key={seg.id}
+                                style={{
+                                  left: `${leftPct}%`,
+                                  width: `${widthPct}%`,
+                                  minWidth: '24px',
+                                }}
+                                className={`absolute h-6.5 rounded-full ${getBarColor(seg.status)} select-none transition-all truncate z-10 shadow-sm cursor-pointer hover:brightness-110`}
+                                title={`Project: ${project.title} | ${seg.sessionTitle || 'Realization'}: ${formatDuration(seg.loggedSeconds)} (${formatD(seg.startDate)}${seg.startDate.getTime() !== seg.endDate.getTime() ? ` - ${formatD(seg.endDate)}` : ''})`}
+                              />
+                            ));
+                          })()}
                         </div>
                       </div>
 
@@ -1667,30 +1872,17 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                           // Consolidate segments that overlap on the same day(s) into single full bars
                           const weekSegments = consolidateDaySegments(rawWeekSegments, weekDays.length);
 
-                          const { minDate, maxDate } = hasChildren && isExpanded
-                            ? (item.actualStartDate ? { minDate: new Date(item.actualStartDate), maxDate: item.actualEndDate ? new Date(item.actualEndDate) : null } : { minDate: null, maxDate: null })
-                            : getRealizationDatesForTree(item);
-
-                          let realizationSummaryText = '';
-                          if (minDate) {
-                            if (maxDate && minDate.getTime() !== maxDate.getTime()) {
-                              realizationSummaryText = `${formatD(minDate)} - ${formatD(maxDate)}`;
-                            } else {
-                              realizationSummaryText = formatD(minDate);
-                            }
-                          }
-
                           const targetPinLeftPct = item.targetDate ? getWeekTargetPinLeftPct(item.targetDate) : null;
 
                           return (
                             <div
                               key={item.id}
-                              className="grid grid-cols-[420px_1fr] hover:bg-[#27272a]/30 transition-colors items-center group"
+                              className="grid grid-cols-[280px_1fr] hover:bg-[#27272a]/30 transition-colors group border-b border-[#27272a]"
                             >
                               {/* Left Column: Task Name */}
                               <div
-                                style={{ paddingLeft: `${18 + depth * 14}px` }}
-                                className={`sticky left-0 z-30 bg-[#121215] group-hover:bg-[#18181c] p-2.5 font-medium border-r border-[#27272a] truncate flex items-center justify-between gap-1.5 pr-2.5 select-none shadow-[4px_0_12px_rgba(0,0,0,0.45)] ${
+                                style={{ paddingLeft: `${14 + depth * 12}px` }}
+                                className={`sticky left-0 z-30 bg-[#121215] group-hover:bg-[#18181c] min-h-[44px] h-full p-2.5 font-medium border-r border-[#27272a] truncate flex items-center justify-between gap-1.5 pr-2 select-none ${
                                   hasChildren ? 'cursor-pointer' : 'cursor-default'
                                 }`}
                                 onClick={() => {
@@ -1701,33 +1893,34 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                 title={hasChildren ? `${isExpanded ? 'Collapse' : 'Expand'} sub-tasks: ${item.name}` : undefined}
                               >
                                 <div className="flex items-center gap-1.5 min-w-0 truncate">
-                                  {hasChildren ? (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (onToggleExpand) onToggleExpand(item.id);
-                                      }}
-                                      className="p-0.5 rounded hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-colors shrink-0"
-                                    >
-                                      {isExpanded ? (
-                                        <ChevronDown className="w-3.5 h-3.5 text-orange-400" />
-                                      ) : (
-                                        <ChevronRight className="w-3.5 h-3.5 text-[#71717a]" />
-                                      )}
-                                    </button>
-                                  ) : (
-                                    <span className="w-3.5 h-3.5 flex items-center justify-center opacity-30 text-[10px] shrink-0">
-                                      •
-                                    </span>
-                                  )}
+                                  {/* Chevron / Bullet aligned with TreeView pattern */}
+                                  <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                                    {hasChildren ? (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (onToggleExpand) onToggleExpand(item.id);
+                                        }}
+                                        className="w-4 h-4 rounded flex items-center justify-center hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-colors shrink-0"
+                                      >
+                                        {isExpanded ? (
+                                          <ChevronDown className="w-3.5 h-3.5 text-orange-400" />
+                                        ) : (
+                                          <ChevronRight className="w-3.5 h-3.5 text-[#71717a]" />
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-[#3f3f46] inline-block" />
+                                    )}
+                                  </div>
 
-                                  <span
-                                    className="w-2 h-2 rounded-full shrink-0 shadow-sm"
-                                    style={{ backgroundColor: project.color || '#f97316' }}
-                                  />
-                                  {item.status === 'completed' && <Check className="w-3.5 h-3.5 text-[#10b981] shrink-0" />}
-                                  <span className={`truncate font-medium ${item.status === 'completed' ? 'text-[#71717a]' : (hasChildren ? 'text-[#f4f4f5] group-hover:text-white' : 'text-[#e4e4e7]')}`}>
+                                  {/* Task Icon / Emoji */}
+                                  <span className="text-xs shrink-0 select-none">
+                                    {item.icon || (hasChildren ? '📁' : '📄')}
+                                  </span>
+
+                                  <span className="truncate text-sm font-medium text-[#f4f4f5] group-hover:text-white">
                                     {item.name}
                                   </span>
 
@@ -1737,16 +1930,10 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                     </span>
                                   )}
                                 </div>
-
-                                {realizationSummaryText ? (
-                                  <span className="text-[10px] font-mono shrink-0 px-1.5 py-0.5 rounded bg-[#27272a] text-[#d4d4d8] border border-[#3f3f46]">
-                                    {realizationSummaryText}
-                                  </span>
-                                ) : null}
                               </div>
 
                               {/* Right Column: Week Grid with Continuous Positioning */}
-                              <div className="relative py-2 px-1 h-12 flex items-center">
+                              <div className="relative py-2 px-1 min-h-[44px] h-full flex items-center">
                                 {/* Background Grid */}
                                 <div
                                   className="absolute inset-0 grid h-full pointer-events-none"
@@ -1789,23 +1976,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                     style={{
                                       left: `${leftPct}%`,
                                       width: `${widthPct}%`,
-                                      minWidth: '28px',
+                                      minWidth: '24px',
                                     }}
-                                    className={`absolute h-7.5 rounded-lg border ${getBarColor(seg.status)} px-2 flex items-center justify-between text-[10px] font-mono shadow-md cursor-pointer hover:brightness-110 select-none transition-all truncate z-10`}
-                                    title={`Click to edit task: ${item.name} | ${seg.sessionTitle || 'Realization'}: ${formatDuration(seg.loggedSeconds)} (${formatD(seg.startDate)}${seg.startDate.getTime() !== seg.endDate.getTime() ? ` - ${formatD(seg.endDate)}` : ''})`}
-                                  >
-                                    <span className="truncate flex items-center gap-1.5 font-sans font-medium">
-                                      {seg.status === 'completed' && <CheckCircle2 className="w-3 h-3 shrink-0" />}
-                                      <span className="truncate">{item.name}</span>
-                                      {((seg.mergedCount && seg.mergedCount > 1) || (weekSegments.length > 1 && seg.sessionTitle)) && (
-                                        <span className="opacity-80 text-[9px] font-mono shrink-0">({seg.sessionTitle})</span>
-                                      )}
-                                    </span>
-                                    <span className="shrink-0 text-[9px] opacity-90 pl-1 font-mono flex items-center gap-0.5">
-                                      <Clock className="w-2.5 h-2.5" />
-                                      {formatDuration(seg.loggedSeconds)}
-                                    </span>
-                                  </div>
+                                    className={`absolute h-6.5 rounded-full ${getBarColor(seg.status)} cursor-pointer hover:brightness-110 select-none transition-all truncate z-10 shadow-sm`}
+                                    title={`Click to edit task: ${item.name} (${getTaskStatusPercentage(item)}%) | ${seg.sessionTitle || 'Realization'}: ${formatDuration(seg.loggedSeconds)} (${formatD(seg.startDate)}${seg.startDate.getTime() !== seg.endDate.getTime() ? ` - ${formatD(seg.endDate)}` : ''})`}
+                                  />
                                 ))}
                               </div>
                             </div>
@@ -1820,17 +1995,46 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
 
           {/* ================= 3. DAY VIEW (HOURLY) ================= */}
           {timeScale === 'day' && (
-            <div style={{ minWidth: `${420 + hoursArray.length * 138}px` }}>
+            <div className="relative" style={{ minWidth: `${280 + hoursArray.length * 138}px` }}>
+              {/* Vertical Today Line (Solid Blue, Hour-sensitive) */}
+              <div className="absolute top-0 bottom-0 right-0 left-[280px] pointer-events-none z-30">
+                {dayTodayPosition !== null && (
+                  <div
+                    className="absolute top-0 bottom-0 border-l-2 border-blue-500"
+                    style={{ left: `${dayTodayPosition}%` }}
+                  >
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 -ml-[5px] -mt-1 shadow-sm" />
+                    <span className="absolute top-2 -left-3.5 px-1.5 py-0.5 bg-blue-500 text-white rounded text-[9px] font-sans font-bold tracking-tight shadow-md select-none">
+                      Today
+                    </span>
+                  </div>
+                )}
+              </div>
+
               {/* Header Hours (3x wider columns) */}
-              <div className="grid grid-cols-[420px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs font-mono text-[#a1a1aa] sticky top-0 z-40">
-                <div className="sticky left-0 z-50 bg-[#18181b] p-3 font-bold border-r border-[#27272a] flex items-center justify-between shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
-                  <span>Project & Task Hierarchy</span>
-                  <span className="text-[10px] text-[#71717a] font-normal">
-                    {hideInactiveHours ? 'Active Hours (06-20)' : '24h Timeline'}
-                  </span>
+              <div className="grid grid-cols-[280px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs text-[#a1a1aa] sticky top-0 z-40">
+                <div className="sticky left-0 z-50 bg-[#18181b] px-3 py-2 font-sans border-r border-[#27272a] flex items-center justify-center shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
+                  <div className="flex items-center justify-center gap-1.5 w-full">
+                    <button
+                      type="button"
+                      onClick={handleExpandAll}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-sans font-medium text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a]/50 transition-colors cursor-pointer"
+                      title="Expand All"
+                    >
+                      Expand All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCollapseAll}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-sans font-medium text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a]/50 transition-colors cursor-pointer"
+                      title="Collapse All"
+                    >
+                      Collapse All
+                    </button>
+                  </div>
                 </div>
                 <div
-                  className="grid text-center divide-x divide-[#27272a] py-1.5"
+                  className="grid text-center divide-x divide-[#27272a] py-1.5 font-mono"
                   style={{ gridTemplateColumns: `repeat(${hoursArray.length}, minmax(138px, 1fr))` }}
                 >
                   {hoursArray.map((hour) => {
@@ -1858,7 +2062,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
               </div>
 
               {/* Rows for Day View Grouped by Project */}
-              <div className="divide-y divide-[#27272a] text-xs">
+              <div className="text-xs">
                 {filteredProjects.map((project) => {
                   const isProjectCollapsed = collapsedProjectIds.has(project.id);
                   const leafTasks = getLeafFlatItems([project]);
@@ -1874,6 +2078,16 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                       ),
                     0
                   );
+
+                  const { minDate: projMinDate, maxDate: projMaxDate } = getRealizationDatesForProject(project);
+                  let projRealizationSummaryText = '';
+                  if (projMinDate) {
+                    if (projMaxDate && projMinDate.getTime() !== projMaxDate.getTime()) {
+                      projRealizationSummaryText = `${formatD(projMinDate)} - ${formatD(projMaxDate)}`;
+                    } else {
+                      projRealizationSummaryText = formatD(projMinDate);
+                    }
+                  }
 
                   const projectFlatItems = filterProjectFlatItems(getVisibleFlatItems([project]));
 
@@ -1899,11 +2113,14 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                       {/* ===== PROJECT NODE ROW (DAY) ===== */}
                       <div
                         id={`timeline-project-node-day-${project.id}`}
-                        className="grid grid-cols-[420px_1fr] bg-[#16161a] hover:bg-[#1a1a1f] transition-colors items-center group font-sans border-b border-[#27272a]"
+                        className="grid grid-cols-[280px_1fr] transition-colors group font-sans border-b border-[#27272a]"
                       >
                         {/* Left Column: Project Node Info */}
                         <div
-                          className="sticky left-0 z-30 bg-[#16161a] group-hover:bg-[#1a1a1f] p-2.5 font-bold border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none shadow-[4px_0_12px_rgba(0,0,0,0.45)]"
+                          style={{
+                            backgroundColor: getSolid20PercentTint(project.color || '#f97316'),
+                          }}
+                          className="sticky left-0 z-30 min-h-[44px] h-full p-2.5 font-bold border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none"
                           onClick={() => toggleProjectCollapse(project.id)}
                           title={`${isProjectCollapsed ? 'Expand' : 'Collapse'} project: ${project.title}`}
                         >
@@ -1914,44 +2131,31 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                 e.stopPropagation();
                                 toggleProjectCollapse(project.id);
                               }}
-                              className="p-0.5 rounded hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-colors shrink-0"
+                              className="p-0.5 rounded hover:bg-black/10 text-slate-700 hover:text-slate-950 transition-colors shrink-0"
                             >
                               {isProjectCollapsed ? (
-                                <ChevronRight className="w-4 h-4 text-orange-400" />
+                                <ChevronRight className="w-4 h-4 text-slate-800" />
                               ) : (
-                                <ChevronDown className="w-4 h-4 text-orange-400" />
+                                <ChevronDown className="w-4 h-4 text-slate-800" />
                               )}
                             </button>
 
-                            <span
-                              className="w-3 h-3 rounded-full shrink-0 shadow-sm ring-2 ring-white/10"
-                              style={{ backgroundColor: project.color || '#f97316' }}
-                            />
-
-                            <span className="truncate text-xs font-bold text-[#f4f4f5] tracking-tight group-hover:text-white">
+                            <span className="truncate text-xs font-bold text-slate-950 tracking-tight">
                               {project.title}
                             </span>
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {onOpenProjectModal && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpenProjectModal(project);
-                                }}
-                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-all"
-                                title="Project Settings"
-                              >
-                                <MoreHorizontal className="w-3.5 h-3.5" />
-                              </button>
-                            )}
+                            {projRealizationSummaryText ? (
+                              <span className="text-[10px] font-mono shrink-0 px-2 py-0.5 rounded bg-black/10 text-slate-900 border border-black/15 font-semibold">
+                                {projRealizationSummaryText}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
 
                         {/* Right Column: Hourly Grid for Project Node (3x wider columns) */}
-                        <div className="relative py-2 px-1 h-12 flex items-center bg-[#141418]/60">
+                        <div className="relative py-2 px-1 min-h-[44px] h-full flex items-center bg-[#141418]/60">
                           {/* Background Hour Column Grid */}
                           <div
                             className="absolute inset-0 grid h-full pointer-events-none"
@@ -1972,6 +2176,62 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                               );
                             })}
                           </div>
+
+                          {/* When project is collapsed, render aggregated task realization cards (acts as parent task) */}
+                          {isProjectCollapsed && (() => {
+                            const projSegments = getProjectRealizationSegments(project);
+                            const projDaySegments = projSegments
+                              .map((seg) => {
+                                const sMs = seg.startDate.getTime();
+                                const eMs = seg.endDate.getTime();
+
+                                if (sMs > dayEndMs || eMs < dayStartMs) {
+                                  return null;
+                                }
+
+                                const isAllDaySpan = !seg.isSession;
+                                let leftPct = 0;
+                                let widthPct = 100;
+                                let timeRangeStr = 'All Day';
+
+                                if (!isAllDaySpan) {
+                                  const visibleStartMs = Math.max(dayStartMs, sMs);
+                                  const visibleEndMs = Math.min(dayEndMs, Math.max(visibleStartMs + 60000, eMs));
+
+                                  leftPct = ((visibleStartMs - dayStartMs) / totalDayMs) * 100;
+                                  widthPct = Math.max(0.5, ((visibleEndMs - visibleStartMs) / totalDayMs) * 100);
+
+                                  const pad = (n: number) => n.toString().padStart(2, '0');
+                                  timeRangeStr = `${pad(seg.startDate.getHours())}:${pad(seg.startDate.getMinutes())} - ${pad(seg.endDate.getHours())}:${pad(seg.endDate.getMinutes())}`;
+                                }
+
+                                return {
+                                  seg,
+                                  leftPct,
+                                  widthPct,
+                                  timeRangeStr,
+                                };
+                              })
+                              .filter(Boolean) as {
+                              seg: RealizationSegment;
+                              leftPct: number;
+                              widthPct: number;
+                              timeRangeStr: string;
+                            }[];
+
+                            return projDaySegments.map(({ seg, leftPct, widthPct, timeRangeStr }) => (
+                              <div
+                                key={seg.id}
+                                style={{
+                                  left: `${leftPct}%`,
+                                  width: `${widthPct}%`,
+                                  minWidth: '24px',
+                                }}
+                                className={`absolute h-6.5 rounded-full ${getBarColor(seg.status)} select-none transition-all truncate z-10 shadow-sm cursor-pointer hover:brightness-110`}
+                                title={`Project: ${project.title} | ${seg.sessionTitle || 'Period'}: ${timeRangeStr} ${seg.loggedSeconds ? `(${formatDuration(seg.loggedSeconds)})` : ''}`}
+                              />
+                            ));
+                          })()}
                         </div>
                       </div>
 
@@ -2042,12 +2302,12 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                           return (
                             <div
                               key={item.id}
-                              className="grid grid-cols-[420px_1fr] hover:bg-[#27272a]/30 transition-colors items-center group"
+                              className="grid grid-cols-[280px_1fr] hover:bg-[#27272a]/30 transition-colors group border-b border-[#27272a]"
                             >
                               {/* Left Column: Task Name */}
                               <div
-                                style={{ paddingLeft: `${18 + depth * 14}px` }}
-                                className={`sticky left-0 z-30 bg-[#121215] group-hover:bg-[#18181c] p-2.5 font-medium border-r border-[#27272a] truncate flex items-center justify-between gap-1.5 pr-2.5 select-none shadow-[4px_0_12px_rgba(0,0,0,0.45)] ${
+                                style={{ paddingLeft: `${14 + depth * 12}px` }}
+                                className={`sticky left-0 z-30 bg-[#121215] group-hover:bg-[#18181c] min-h-[44px] h-full p-2.5 font-medium border-r border-[#27272a] truncate flex items-center justify-between gap-1.5 pr-2 select-none ${
                                   hasChildren ? 'cursor-pointer' : 'cursor-default'
                                 }`}
                                 onClick={() => {
@@ -2058,33 +2318,34 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                 title={hasChildren ? `${isExpanded ? 'Collapse' : 'Expand'} sub-tasks: ${item.name}` : undefined}
                               >
                                 <div className="flex items-center gap-1.5 min-w-0 truncate">
-                                  {hasChildren ? (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (onToggleExpand) onToggleExpand(item.id);
-                                      }}
-                                      className="p-0.5 rounded hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-colors shrink-0"
-                                    >
-                                      {isExpanded ? (
-                                        <ChevronDown className="w-3.5 h-3.5 text-orange-400" />
-                                      ) : (
-                                        <ChevronRight className="w-3.5 h-3.5 text-[#71717a]" />
-                                      )}
-                                    </button>
-                                  ) : (
-                                    <span className="w-3.5 h-3.5 flex items-center justify-center opacity-30 text-[10px] shrink-0">
-                                      •
-                                    </span>
-                                  )}
+                                  {/* Chevron / Bullet aligned with TreeView pattern */}
+                                  <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                                    {hasChildren ? (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (onToggleExpand) onToggleExpand(item.id);
+                                        }}
+                                        className="w-4 h-4 rounded flex items-center justify-center hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-colors shrink-0"
+                                      >
+                                        {isExpanded ? (
+                                          <ChevronDown className="w-3.5 h-3.5 text-orange-400" />
+                                        ) : (
+                                          <ChevronRight className="w-3.5 h-3.5 text-[#71717a]" />
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-[#3f3f46] inline-block" />
+                                    )}
+                                  </div>
 
-                                  <span
-                                    className="w-2 h-2 rounded-full shrink-0 shadow-sm"
-                                    style={{ backgroundColor: project.color || '#f97316' }}
-                                  />
-                                  {item.status === 'completed' && <Check className="w-3.5 h-3.5 text-[#10b981] shrink-0" />}
-                                  <span className={`truncate font-medium ${item.status === 'completed' ? 'text-[#71717a]' : (hasChildren ? 'text-[#f4f4f5] group-hover:text-white' : 'text-[#e4e4e7]')}`}>
+                                  {/* Task Icon / Emoji */}
+                                  <span className="text-xs shrink-0 select-none">
+                                    {item.icon || (hasChildren ? '📁' : '📄')}
+                                  </span>
+
+                                  <span className="truncate text-sm font-medium text-[#f4f4f5] group-hover:text-white">
                                     {item.name}
                                   </span>
 
@@ -2094,20 +2355,10 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                     </span>
                                   )}
                                 </div>
-
-                                {totalTodaySeconds > 0 ? (
-                                  <span className="text-[10px] font-mono shrink-0 px-2 py-0.5 rounded bg-[#27272a] text-orange-400 border border-[#3f3f46]">
-                                    {formatDuration(totalTodaySeconds)}
-                                  </span>
-                                ) : daySegments.length > 0 ? (
-                                  <span className="text-[10px] font-mono shrink-0 px-2 py-0.5 rounded bg-[#27272a] text-[#a1a1aa] border border-[#3f3f46]">
-                                    Active Today
-                                  </span>
-                                ) : null}
                               </div>
 
                               {/* Right Column: Hourly Timeline with Precise Continuous Positioning (3x wider columns) */}
-                              <div className="relative py-2 px-1 h-12 flex items-center">
+                              <div className="relative py-2 px-1 min-h-[44px] h-full flex items-center">
                                 {/* Background Hour Column Grid */}
                                 <div
                                   className="absolute inset-0 grid h-full pointer-events-none"
@@ -2153,25 +2404,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                     style={{
                                       left: `${leftPct}%`,
                                       width: `${widthPct}%`,
-                                      minWidth: '36px',
+                                      minWidth: '24px',
                                     }}
-                                    className={`absolute h-7.5 rounded-lg border ${getBarColor(seg.status)} px-2.5 flex items-center justify-between text-[10px] font-mono shadow-md cursor-pointer hover:brightness-110 select-none transition-all truncate z-10`}
-                                    title={`Click to edit task: ${item.name} | ${seg.sessionTitle || 'Period'}: ${timeRangeStr} ${seg.loggedSeconds ? `(${formatDuration(seg.loggedSeconds)})` : ''}`}
-                                  >
-                                    <span className="truncate flex items-center gap-1.5 font-sans font-medium">
-                                      {seg.status === 'completed' && <CheckCircle2 className="w-3 h-3 shrink-0" />}
-                                      <span className="truncate">{item.name}</span>
-                                      {((seg.mergedCount && seg.mergedCount > 1) || (daySegments.length > 1 && seg.sessionTitle)) && (
-                                        <span className="opacity-85 text-[9px] font-mono shrink-0">({seg.sessionTitle})</span>
-                                      )}
-                                    </span>
-                                    <span className="shrink-0 text-[9px] opacity-90 pl-1.5 font-mono flex items-center gap-1">
-                                      <Clock className="w-2.5 h-2.5" />
-                                      {seg.loggedSeconds > 0
-                                        ? (timeRangeStr !== 'All Day' ? `${timeRangeStr} (${formatDuration(seg.loggedSeconds)})` : formatDuration(seg.loggedSeconds))
-                                        : timeRangeStr}
-                                    </span>
-                                  </div>
+                                    className={`absolute h-6.5 rounded-full ${getBarColor(seg.status)} cursor-pointer hover:brightness-110 select-none transition-all truncate z-10 shadow-sm`}
+                                    title={`Click to edit task: ${item.name} (${getTaskStatusPercentage(item)}%) | ${seg.sessionTitle || 'Period'}: ${timeRangeStr} ${seg.loggedSeconds ? `(${formatDuration(seg.loggedSeconds)})` : ''}`}
+                                  />
                                 ))}
                               </div>
                             </div>
@@ -2186,15 +2423,46 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
 
           {/* ================= 4. YEAR VIEW (12 MONTHS) ================= */}
           {timeScale === 'year' && (
-            <div style={{ minWidth: '1380px' }}>
+            <div className="relative" style={{ minWidth: '1180px' }}>
+              {/* Vertical Today Line (Solid Blue, Hour-sensitive) */}
+              <div className="absolute top-0 bottom-0 right-0 left-[280px] pointer-events-none z-30">
+                {yearTodayPosition !== null && (
+                  <div
+                    className="absolute top-0 bottom-0 border-l-2 border-blue-500"
+                    style={{ left: `${yearTodayPosition}%` }}
+                  >
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 -ml-[5px] -mt-1 shadow-sm" />
+                    <span className="absolute top-2 -left-3.5 px-1.5 py-0.5 bg-blue-500 text-white rounded text-[9px] font-sans font-bold tracking-tight shadow-md select-none">
+                      Today
+                    </span>
+                  </div>
+                )}
+              </div>
+
               {/* Header 12 Months */}
-              <div className="grid grid-cols-[420px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs font-mono text-[#a1a1aa] sticky top-0 z-40">
-                <div className="sticky left-0 z-50 bg-[#18181b] p-3 font-bold border-r border-[#27272a] flex items-center justify-between shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
-                  <span>Project & Task Hierarchy</span>
-                  <span className="text-[10px] text-[#71717a] font-normal">{currentYear} Full Year</span>
+              <div className="grid grid-cols-[280px_1fr] bg-[#18181b] border-b border-[#27272a] text-xs text-[#a1a1aa] sticky top-0 z-40">
+                <div className="sticky left-0 z-50 bg-[#18181b] px-3 py-2 font-sans border-r border-[#27272a] flex items-center justify-center shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
+                  <div className="flex items-center justify-center gap-1.5 w-full">
+                    <button
+                      type="button"
+                      onClick={handleExpandAll}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-sans font-medium text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a]/50 transition-colors cursor-pointer"
+                      title="Expand All"
+                    >
+                      Expand All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCollapseAll}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-sans font-medium text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a]/50 transition-colors cursor-pointer"
+                      title="Collapse All"
+                    >
+                      Collapse All
+                    </button>
+                  </div>
                 </div>
                 <div
-                  className="grid text-center divide-x divide-[#27272a] py-2"
+                  className="grid text-center divide-x divide-[#27272a] py-2 font-mono"
                   style={{ gridTemplateColumns: 'repeat(12, minmax(75px, 1fr))' }}
                 >
                   {monthNames.map((mName, mIdx) => {
@@ -2223,7 +2491,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
               </div>
 
               {/* Rows for Year Grouped by Project */}
-              <div className="divide-y divide-[#27272a] text-xs">
+              <div className="text-xs">
                 {filteredProjects.map((project) => {
                   const isProjectCollapsed = collapsedProjectIds.has(project.id);
                   const leafTasks = getLeafFlatItems([project]);
@@ -2238,28 +2506,6 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                     }
                   }
 
-                  // Project year milestone bar positioning (Month-snapped columns)
-                  let projYearBar: { leftPct: number; widthPct: number } | null = null;
-                  const yearStartMs = new Date(currentYear, 0, 1, 0, 0, 0, 0).getTime();
-                  const yearEndMs = new Date(currentYear, 11, 31, 23, 59, 59, 999).getTime();
-
-                  if (projMinDate) {
-                    const pStartDate = new Date(projMinDate);
-                    const pEndDate = projMaxDate ? new Date(projMaxDate) : new Date(projMinDate);
-
-                    const pStartMs = pStartDate.getTime();
-                    const pEndMs = pEndDate.getTime();
-
-                    if (pEndMs >= yearStartMs && pStartMs <= yearEndMs) {
-                      const startCol = pStartDate.getFullYear() < currentYear ? 0 : pStartDate.getMonth();
-                      const endCol = pEndDate.getFullYear() > currentYear ? 11 : pEndDate.getMonth();
-                      const countCols = Math.max(1, endCol - startCol + 1);
-                      const leftPct = (startCol / 12) * 100;
-                      const widthPct = (countCols / 12) * 100;
-                      projYearBar = { leftPct, widthPct };
-                    }
-                  }
-
                   const projectFlatItems = filterProjectFlatItems(getVisibleFlatItems([project]));
 
                   if (filterMode === 'realized-only' && !projMinDate && projectFlatItems.length === 0) {
@@ -2271,11 +2517,14 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                       {/* ===== PROJECT NODE ROW (YEAR) ===== */}
                       <div
                         id={`timeline-project-node-year-${project.id}`}
-                        className="grid grid-cols-[420px_1fr] bg-[#16161a] hover:bg-[#1a1a1f] transition-colors items-center group font-sans border-b border-[#27272a]"
+                        className="grid grid-cols-[280px_1fr] transition-colors group font-sans border-b border-[#27272a]"
                       >
                         {/* Left Column: Project Node Info */}
                         <div
-                          className="sticky left-0 z-30 bg-[#16161a] group-hover:bg-[#1a1a1f] p-2.5 font-bold border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none shadow-[4px_0_12px_rgba(0,0,0,0.45)]"
+                          style={{
+                            backgroundColor: getSolid20PercentTint(project.color || '#f97316'),
+                          }}
+                          className="sticky left-0 z-30 min-h-[44px] h-full p-2.5 font-bold border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none"
                           onClick={() => toggleProjectCollapse(project.id)}
                           title={`${isProjectCollapsed ? 'Expand' : 'Collapse'} project: ${project.title}`}
                         >
@@ -2286,50 +2535,31 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                 e.stopPropagation();
                                 toggleProjectCollapse(project.id);
                               }}
-                              className="p-0.5 rounded hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-colors shrink-0"
+                              className="p-0.5 rounded hover:bg-black/10 text-slate-700 hover:text-slate-950 transition-colors shrink-0"
                             >
                               {isProjectCollapsed ? (
-                                <ChevronRight className="w-4 h-4 text-orange-400" />
+                                <ChevronRight className="w-4 h-4 text-slate-800" />
                               ) : (
-                                <ChevronDown className="w-4 h-4 text-orange-400" />
+                                <ChevronDown className="w-4 h-4 text-slate-800" />
                               )}
                             </button>
 
-                            <span
-                              className="w-3 h-3 rounded-full shrink-0 shadow-sm ring-2 ring-white/10"
-                              style={{ backgroundColor: project.color || '#f97316' }}
-                            />
-
-                            <span className="truncate text-xs font-bold text-[#f4f4f5] tracking-tight group-hover:text-white">
+                            <span className="truncate text-xs font-bold text-slate-950 tracking-tight">
                               {project.title}
                             </span>
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0">
                             {projRealizationSummaryText ? (
-                              <span className="text-[10px] font-mono shrink-0 px-2 py-0.5 rounded bg-[#27272a] text-orange-300 border border-orange-500/30">
+                              <span className="text-[10px] font-mono shrink-0 px-2 py-0.5 rounded bg-black/10 text-slate-900 border border-black/15 font-semibold">
                                 {projRealizationSummaryText}
                               </span>
                             ) : null}
-
-                            {onOpenProjectModal && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpenProjectModal(project);
-                                }}
-                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-all"
-                                title="Project Settings"
-                              >
-                                <MoreHorizontal className="w-3.5 h-3.5" />
-                              </button>
-                            )}
                           </div>
                         </div>
 
                         {/* Right Column: Year Grid for Project Node */}
-                        <div className="relative py-2 px-1 h-12 flex items-center bg-[#141418]/60">
+                        <div className="relative py-2 px-1 min-h-[44px] h-full flex items-center bg-[#141418]/60">
                           {/* Background Grid Months */}
                           <div
                             className="absolute inset-0 grid h-full pointer-events-none"
@@ -2343,27 +2573,44 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                             ))}
                           </div>
 
-                          {/* Project Summary Milestone Bar for Year */}
-                          {projYearBar && (
-                            <div
-                              style={{
-                                left: `${projYearBar.leftPct}%`,
-                                width: `${projYearBar.widthPct}%`,
-                                minWidth: '36px',
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (onOpenProjectModal) onOpenProjectModal(project);
-                              }}
-                              className="absolute h-7 rounded-md border border-orange-500/50 bg-gradient-to-r from-orange-500/25 via-amber-500/20 to-orange-500/25 px-2 flex items-center text-[10px] font-mono text-orange-200 shadow-md shadow-orange-950/20 cursor-pointer hover:brightness-125 select-none transition-all truncate z-10"
-                              title={`Project: ${project.title}${projRealizationSummaryText ? ` | ${projRealizationSummaryText}` : ''}`}
-                            >
-                              <span className="truncate flex items-center gap-1.5 font-sans font-bold text-orange-300">
-                                <Folder className="w-3 h-3 text-orange-400 shrink-0" />
-                                <span className="truncate">{project.title}</span>
-                              </span>
-                            </div>
-                          )}
+                          {/* When project is collapsed, render aggregated task realization cards (acts as parent task) */}
+                          {isProjectCollapsed && (() => {
+                            const projSegments = getProjectRealizationSegments(project);
+                            const rawProjYearSegments = projSegments
+                              .map((seg) => {
+                                const sMs = seg.startDate.getTime();
+                                const eMs = seg.endDate.getTime();
+
+                                if (eMs < yearStartMs || sMs > yearEndMs) {
+                                  return null;
+                                }
+
+                                const startCol = seg.startDate.getFullYear() < currentYear ? 0 : seg.startDate.getMonth();
+                                const endCol = seg.endDate.getFullYear() > currentYear ? 11 : seg.endDate.getMonth();
+
+                                return {
+                                  seg,
+                                  startCol,
+                                  endCol,
+                                };
+                              })
+                              .filter(Boolean) as { seg: RealizationSegment; startCol: number; endCol: number }[];
+
+                            const projYearSegments = consolidateDaySegments(rawProjYearSegments, 12);
+
+                            return projYearSegments.map(({ seg, leftPct, widthPct }) => (
+                              <div
+                                key={seg.id}
+                                style={{
+                                  left: `${leftPct}%`,
+                                  width: `${widthPct}%`,
+                                  minWidth: '24px',
+                                }}
+                                className={`absolute h-6 rounded-full ${getBarColor(seg.status)} select-none transition-all truncate z-10 shadow-sm cursor-pointer hover:brightness-110`}
+                                title={`Project: ${project.title} | ${seg.sessionTitle || 'Realization'}: ${formatDuration(seg.loggedSeconds)} (${formatD(seg.startDate)}${seg.startDate.getTime() !== seg.endDate.getTime() ? ` - ${formatD(seg.endDate)}` : ''})`}
+                              />
+                            ));
+                          })()}
                         </div>
                       </div>
 
@@ -2404,19 +2651,6 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                           // Consolidate segments that overlap on the same month(s) into single full bars
                           const yearSegments = consolidateDaySegments(rawYearSegments, 12);
 
-                          const { minDate, maxDate } = hasChildren && isExpanded
-                            ? (item.actualStartDate ? { minDate: new Date(item.actualStartDate), maxDate: item.actualEndDate ? new Date(item.actualEndDate) : null } : { minDate: null, maxDate: null })
-                            : getRealizationDatesForTree(item);
-
-                          let realizationSummaryText = '';
-                          if (minDate) {
-                            if (maxDate && minDate.getTime() !== maxDate.getTime()) {
-                              realizationSummaryText = `${formatD(minDate)} - ${formatD(maxDate)}`;
-                            } else {
-                              realizationSummaryText = formatD(minDate);
-                            }
-                          }
-
                           let targetPinLeftPct: number | null = null;
                           if (item.targetDate) {
                             const tDate = new Date(item.targetDate);
@@ -2428,12 +2662,12 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                           return (
                             <div
                               key={item.id}
-                              className="grid grid-cols-[420px_1fr] hover:bg-[#27272a]/30 transition-colors items-center group"
+                              className="grid grid-cols-[280px_1fr] hover:bg-[#27272a]/30 transition-colors group border-b border-[#27272a]"
                             >
                               {/* Left Column: Task Name */}
                               <div
-                                style={{ paddingLeft: `${18 + depth * 14}px` }}
-                                className={`sticky left-0 z-30 bg-[#121215] group-hover:bg-[#18181c] p-2.5 font-medium border-r border-[#27272a] truncate flex items-center justify-between gap-1.5 pr-2.5 select-none shadow-[4px_0_12px_rgba(0,0,0,0.45)] ${
+                                style={{ paddingLeft: `${14 + depth * 12}px` }}
+                                className={`sticky left-0 z-30 bg-[#121215] group-hover:bg-[#18181c] min-h-[44px] h-full p-2.5 font-medium border-r border-[#27272a] truncate flex items-center justify-between gap-1.5 pr-2 select-none ${
                                   hasChildren ? 'cursor-pointer' : 'cursor-default'
                                 }`}
                                 onClick={() => {
@@ -2444,33 +2678,34 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                 title={hasChildren ? `${isExpanded ? 'Collapse' : 'Expand'} sub-tasks: ${item.name}` : undefined}
                               >
                                 <div className="flex items-center gap-1.5 min-w-0 truncate">
-                                  {hasChildren ? (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (onToggleExpand) onToggleExpand(item.id);
-                                      }}
-                                      className="p-0.5 rounded hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-colors shrink-0"
-                                    >
-                                      {isExpanded ? (
-                                        <ChevronDown className="w-3.5 h-3.5 text-orange-400" />
-                                      ) : (
-                                        <ChevronRight className="w-3.5 h-3.5 text-[#71717a]" />
-                                      )}
-                                    </button>
-                                  ) : (
-                                    <span className="w-3.5 h-3.5 flex items-center justify-center opacity-30 text-[10px] shrink-0">
-                                      •
-                                    </span>
-                                  )}
+                                  {/* Chevron / Bullet aligned with TreeView pattern */}
+                                  <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                                    {hasChildren ? (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (onToggleExpand) onToggleExpand(item.id);
+                                        }}
+                                        className="w-4 h-4 rounded flex items-center justify-center hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] transition-colors shrink-0"
+                                      >
+                                        {isExpanded ? (
+                                          <ChevronDown className="w-3.5 h-3.5 text-orange-400" />
+                                        ) : (
+                                          <ChevronRight className="w-3.5 h-3.5 text-[#71717a]" />
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-[#3f3f46] inline-block" />
+                                    )}
+                                  </div>
 
-                                  <span
-                                    className="w-2 h-2 rounded-full shrink-0 shadow-sm"
-                                    style={{ backgroundColor: project.color || '#f97316' }}
-                                  />
-                                  {item.status === 'completed' && <Check className="w-3.5 h-3.5 text-[#10b981] shrink-0" />}
-                                  <span className={`truncate font-medium ${item.status === 'completed' ? 'text-[#71717a]' : (hasChildren ? 'text-[#f4f4f5] group-hover:text-white' : 'text-[#e4e4e7]')}`}>
+                                  {/* Task Icon / Emoji */}
+                                  <span className="text-xs shrink-0 select-none">
+                                    {item.icon || (hasChildren ? '📁' : '📄')}
+                                  </span>
+
+                                  <span className="truncate text-sm font-medium text-[#f4f4f5] group-hover:text-white">
                                     {item.name}
                                   </span>
 
@@ -2480,16 +2715,10 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                     </span>
                                   )}
                                 </div>
-
-                                {realizationSummaryText ? (
-                                  <span className="text-[10px] font-mono shrink-0 px-1.5 py-0.5 rounded bg-[#27272a] text-[#d4d4d8] border border-[#3f3f46]">
-                                    {realizationSummaryText}
-                                  </span>
-                                ) : null}
                               </div>
 
                               {/* Right Column: Year Grid with Continuous Positioning */}
-                              <div className="relative py-2 px-1 h-12 flex items-center">
+                              <div className="relative py-2 px-1 min-h-[44px] h-full flex items-center">
                                 {/* Background Grid Months */}
                                 <div
                                   className="absolute inset-0 grid h-full pointer-events-none"
@@ -2527,23 +2756,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                     style={{
                                       left: `${leftPct}%`,
                                       width: `${widthPct}%`,
-                                      minWidth: '28px',
+                                      minWidth: '24px',
                                     }}
-                                    className={`absolute h-7.5 rounded-lg border ${getBarColor(seg.status)} px-2 flex items-center justify-between text-[10px] font-mono shadow-md cursor-pointer hover:brightness-110 select-none transition-all truncate z-10`}
-                                    title={`Click to edit task: ${item.name} | ${seg.sessionTitle || 'Realization'}: ${formatDuration(seg.loggedSeconds)} (${formatD(seg.startDate)}${seg.startDate.getTime() !== seg.endDate.getTime() ? ` - ${formatD(seg.endDate)}` : ''})`}
-                                  >
-                                    <span className="truncate flex items-center gap-1.5 font-sans font-medium">
-                                      {seg.status === 'completed' && <CheckCircle2 className="w-3 h-3 shrink-0" />}
-                                      <span className="truncate">{item.name}</span>
-                                      {((seg.mergedCount && seg.mergedCount > 1) || (yearSegments.length > 1 && seg.sessionTitle)) && (
-                                        <span className="opacity-80 text-[9px] font-mono shrink-0">({seg.sessionTitle})</span>
-                                      )}
-                                    </span>
-                                    <span className="shrink-0 text-[9px] opacity-90 pl-1 font-mono flex items-center gap-0.5">
-                                      <Clock className="w-2.5 h-2.5" />
-                                      {formatDuration(seg.loggedSeconds)}
-                                    </span>
-                                  </div>
+                                    className={`absolute h-6.5 rounded-full ${getBarColor(seg.status)} cursor-pointer hover:brightness-110 select-none transition-all truncate z-10 shadow-sm`}
+                                    title={`Click to edit task: ${item.name} (${getTaskStatusPercentage(item)}%) | ${seg.sessionTitle || 'Realization'}: ${formatDuration(seg.loggedSeconds)} (${formatD(seg.startDate)}${seg.startDate.getTime() !== seg.endDate.getTime() ? ` - ${formatD(seg.endDate)}` : ''})`}
+                                  />
                                 ))}
                               </div>
                             </div>

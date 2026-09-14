@@ -1078,6 +1078,7 @@ function WorkspaceApp() {
           {currentView === 'tasks' && (
             <KanbanView
               appData={appData}
+              onSaveData={persistData}
               onStartTimer={handleStartTimer}
               onStopTimer={handleStopTimer}
               onUpdateItemStatus={handleUpdateItemStatus}
