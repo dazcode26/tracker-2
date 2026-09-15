@@ -327,7 +327,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
   const renderStatusBadge = (status: ItemStatus) => {
     const config = getStatusConfig(status);
     return (
-      <span className="h-6 inline-flex items-center gap-1.5 px-2.5 rounded-full text-[10px] font-medium cursor-pointer transition-all hover:bg-zinc-100 bg-white text-zinc-900 select-none border-0 shrink-0">
+      <span className="h-6 inline-flex items-center gap-1.5 px-2.5 rounded-full text-[11px] font-medium cursor-pointer transition-all hover:bg-zinc-100 bg-white text-zinc-900 select-none border-0 shrink-0">
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${config.dotBg}`} />
         <span className="capitalize whitespace-nowrap text-zinc-900 font-medium leading-none">{config.label}</span>
       </span>

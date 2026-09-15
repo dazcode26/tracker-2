@@ -745,7 +745,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                                     : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
                                 );
                               }}
-                              className="h-6 inline-flex items-center gap-1.5 px-2.5 rounded-full text-[10px] font-medium cursor-pointer transition-all hover:bg-zinc-100 bg-white text-zinc-900 select-none border-0 shrink-0"
+                              className="h-6 inline-flex items-center gap-1.5 px-2.5 rounded-full text-[11px] font-medium cursor-pointer transition-all hover:bg-zinc-100 bg-white text-zinc-900 select-none border-0 shrink-0"
                               title="Click to change task status"
                             >
                               <span
