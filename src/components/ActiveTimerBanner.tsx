@@ -10,14 +10,18 @@ interface ActiveTimerBannerProps {
   hideOnLg?: boolean;
 }
 
-const formatTimerClock = (totalSec: number): string => {
-  const hrs = Math.floor(totalSec / 3600);
-  const mins = Math.floor((totalSec % 3600) / 60);
+const formatSessionTime = (totalSec: number): string => {
+  if (totalSec < 60) {
+    return `${totalSec} s`;
+  }
+  const mins = Math.floor(totalSec / 60);
   const secs = totalSec % 60;
-  const hh = String(hrs).padStart(2, '0');
-  const mm = String(mins).padStart(2, '0');
-  const ss = String(secs).padStart(2, '0');
-  return `${hh}:${mm}:${ss}`;
+  if (totalSec < 3600) {
+    return `${mins} min ${secs} s`;
+  }
+  const hrs = Math.floor(totalSec / 3600);
+  const remMins = mins % 60;
+  return `${hrs} h ${remMins} min ${secs} s`;
 };
 
 export const ActiveTimerBanner: React.FC<ActiveTimerBannerProps> = ({
@@ -28,23 +32,12 @@ export const ActiveTimerBanner: React.FC<ActiveTimerBannerProps> = ({
 }) => {
   const activeTimer = appData.settings.activeTimer;
   const activeItemInfo = activeTimer ? findItemById(appData, activeTimer.itemId) : null;
-  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [, setTick] = useState<number>(0);
 
   // Active timer live tick effect
   useEffect(() => {
-    if (!activeTimer) {
-      setElapsedSeconds(0);
-      return;
-    }
-    const updateElapsed = () => {
-      const startTime = new Date(activeTimer.startedAt).getTime();
-      const nowTime = Date.now();
-      const diffSec = Math.max(0, Math.floor((nowTime - startTime) / 1000));
-      setElapsedSeconds(diffSec);
-    };
-
-    updateElapsed();
-    const interval = setInterval(updateElapsed, 1000);
+    if (!activeTimer) return;
+    const interval = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(interval);
   }, [activeTimer]);
 
@@ -53,30 +46,44 @@ export const ActiveTimerBanner: React.FC<ActiveTimerBannerProps> = ({
   const item = activeItemInfo.item;
   const isLight = appData.settings.theme === 'light';
 
+  // Calculate live session duration in seconds
+  const sessionSec = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(activeTimer.startedAt).getTime()) / 1000)
+  );
+  const formattedSessionTime = formatSessionTime(sessionSec);
+
   return (
     <div
       id="active-timer-banner"
-      className={`active-timer-banner sticky top-0 w-full shrink-0 border-b transition-colors z-50 flex items-center justify-center px-4 h-9 select-none animate-in fade-in slide-in-from-top-2 duration-200 ${
+      className={`active-timer-banner sticky top-0 w-full shrink-0 border-b transition-colors z-50 flex items-center justify-center px-4 h-9 select-none animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden relative ${
         isLight
-          ? 'bg-[#fff7ed] border-orange-200/80 text-slate-900 shadow-xs'
-          : 'bg-[#161619] border-orange-500/30 text-[#f4f4f5]'
+          ? 'bg-white border-slate-300/80 text-slate-900'
+          : 'bg-[#101010] border-[#27272a] text-[#f4f4f5]'
       } ${hideOnLg ? 'lg:hidden' : ''}`}
       style={{
-        borderColor: isLight
-          ? 'rgba(249, 115, 22, 0.35)'
-          : 'var(--accent-subtle-border, rgba(249, 115, 22, 0.40))',
+        borderColor: 'var(--accent-subtle-border, rgba(59, 130, 246, 0.4))',
+        backgroundColor: isLight ? '#ffffff' : '#101010',
       }}
     >
-      {/* Centered Cluster: Task Name, Clock, and Stop Icon Button */}
-      <div className="flex items-center justify-center gap-2.5 sm:gap-3 max-w-full truncate px-2">
+      {/* Subtle accent tint overlay over solid background to prevent scroll text bleed */}
+      <div
+        className="absolute inset-0 pointer-events-none z-0"
+        style={{
+          backgroundColor: 'var(--accent-subtle-bg, rgba(59, 130, 246, 0.12))',
+        }}
+      />
+
+      {/* Centered Cluster: Task Name, Clock, and Stop Button */}
+      <div className="relative z-10 flex items-center justify-center gap-2.5 sm:gap-3 max-w-full truncate px-2">
         {/* Task Name */}
         <button
           type="button"
           onClick={() => onOpenItemModal && onOpenItemModal(item)}
           className={`active-timer-task-name text-xs font-semibold truncate hover:underline text-left cursor-pointer flex items-center gap-1 max-w-[180px] sm:max-w-[320px] md:max-w-[480px] ${
             isLight
-              ? 'text-slate-900 hover:text-orange-600'
-              : 'text-[#f4f4f5] hover:text-orange-300'
+              ? 'text-slate-900 hover:text-slate-700'
+              : 'text-[#f4f4f5] hover:text-white'
           } ${onOpenItemModal ? 'group' : ''}`}
           title={`Task: ${item.name} (Click to open details)`}
         >
@@ -91,37 +98,35 @@ export const ActiveTimerBanner: React.FC<ActiveTimerBannerProps> = ({
           )}
         </button>
 
-        {/* Subtle Separator Dot */}
+        {/* Separator | using theme accent */}
         <span
-          className={`active-timer-sep text-xs shrink-0 select-none ${
-            isLight ? 'text-slate-400' : 'text-[#71717a]'
-          }`}
+          className="text-[11px] font-bold shrink-0 select-none opacity-60"
+          style={{ color: 'var(--accent-main, #3b82f6)' }}
         >
-          ·
+          |
         </span>
 
-        {/* Raw Live Digital Clock (No badge / box border) */}
+        {/* Live Clock with pulsing effect matching TreeView */}
         <span
-          className={`text-xs sm:text-sm font-mono font-bold tracking-wider shrink-0 ${
-            isLight ? 'text-orange-600' : 'text-orange-400'
-          }`}
+          className="font-mono text-[11px] font-bold whitespace-nowrap shrink-0 animate-pulse"
           style={{
-            color: isLight ? '#ea580c' : 'var(--accent-text, #fb923c)',
+            color: 'var(--accent-text, #3b82f6)',
           }}
           title="Elapsed session time"
         >
-          {formatTimerClock(elapsedSeconds)}
+          {formattedSessionTime}
         </span>
 
-        {/* Stop Button: Square Icon Only (No 'Stop & Save' text) */}
+        {/* Compact Red Pill Stop Button */}
         <button
           type="button"
           onClick={onStopTimer}
-          className="w-6 h-6 rounded-md text-white transition-all flex items-center justify-center shadow-xs cursor-pointer shrink-0 hover:opacity-90 hover:scale-105 active:scale-95 bg-orange-500 hover:bg-orange-600"
+          className="h-5 px-2 rounded-full bg-[#ef4444] hover:bg-red-600 text-white text-[10px] font-medium flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 shrink-0"
           title="Stop timer & log session"
           aria-label="Stop timer and log session"
         >
-          <Square className="w-2.5 h-2.5 fill-current" />
+          <Square className="w-2 h-2 fill-current" />
+          <span className="leading-none">Stop</span>
         </button>
       </div>
     </div>

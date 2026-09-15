@@ -624,11 +624,11 @@
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.04) !important;
 }
 
-/* Active Timer Banner Light & Dark Mode Contrast Rules */
+/* Active Timer Banner & Toolbar Dynamic Theme Accent Rules */
 [data-theme="light"] #active-timer-banner,
 [data-theme="light"] .active-timer-banner {
-  background-color: #fff7ed !important;
-  border-bottom-color: rgba(249, 115, 22, 0.35) !important;
+  background-color: #ffffff !important;
+  border-bottom-color: var(--accent-subtle-border, rgba(59, 130, 246, 0.40)) !important;
 }
 
 [data-theme="light"] #active-timer-banner .active-timer-task-name,
@@ -638,7 +638,7 @@
 
 [data-theme="light"] #active-timer-banner .active-timer-task-name:hover,
 [data-theme="light"] .active-timer-banner .active-timer-task-name:hover {
-  color: #ea580c !important;
+  color: var(--accent-main, #3b82f6) !important;
 }
 
 [data-theme="light"] #active-timer-banner .active-timer-sep,
@@ -648,8 +648,8 @@
 
 [data-theme="light"] #toolbar-active-timer,
 [data-theme="light"] .toolbar-active-timer {
-  background-color: #fff7ed !important;
-  border-color: rgba(249, 115, 22, 0.40) !important;
+  background-color: var(--accent-subtle-bg, rgba(59, 130, 246, 0.12)) !important;
+  border-color: var(--accent-subtle-border, rgba(59, 130, 246, 0.40)) !important;
 }
 
 [data-theme="light"] #toolbar-active-timer .toolbar-timer-task-name,
@@ -659,7 +659,7 @@
 
 [data-theme="light"] #toolbar-active-timer .toolbar-timer-task-name:hover,
 [data-theme="light"] .toolbar-active-timer .toolbar-timer-task-name:hover {
-  color: #ea580c !important;
+  color: var(--accent-main, #3b82f6) !important;
 }
 
 

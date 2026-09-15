@@ -327,7 +327,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
   const renderStatusBadge = (status: ItemStatus) => {
     const config = getStatusConfig(status);
     return (
-      <span className="h-6 inline-flex items-center gap-1.5 px-2.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:bg-zinc-100 bg-white text-zinc-900 select-none border-0 shrink-0">
+      <span className="h-6 inline-flex items-center gap-1.5 px-2.5 rounded-full text-[10px] font-medium cursor-pointer transition-all hover:bg-zinc-100 bg-white text-zinc-900 select-none border-0 shrink-0">
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${config.dotBg}`} />
         <span className="capitalize whitespace-nowrap text-zinc-900 font-medium leading-none">{config.label}</span>
       </span>
@@ -432,9 +432,8 @@ export const TreeView: React.FC<TreeViewProps> = ({
     return (
       <React.Fragment key={item.id}>
         <div
-          className={`group flex items-center border-b border-[#27272a] hover:bg-[#18181b]/70 transition-colors text-sm text-[#f4f4f5] select-none min-h-[40px] relative w-full ${
-            isTimerRunning ? 'bg-orange-500/10' : ''
-          }`}
+          className={`group flex items-center border-b border-[#27272a] hover:bg-[#18181b]/70 transition-colors text-sm text-[#f4f4f5] select-none min-h-[40px] relative w-full`}
+          style={isTimerRunning ? { backgroundColor: 'var(--accent-subtle-bg, rgba(59, 130, 246, 0.12))' } : undefined}
         >
           {/* Column 1: NAME */}
           <div
@@ -554,11 +553,17 @@ export const TreeView: React.FC<TreeViewProps> = ({
               </button>
             </div>
 
-            {/* Timer active badge indicator */}
+            {/* Timer active indicator dot */}
             {isTimerRunning && (
-              <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-orange-500/20 text-orange-400 font-mono flex items-center gap-1 animate-pulse shrink-0 border border-orange-500/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                Active
+              <span className="relative flex h-2 w-2 shrink-0 ml-2" title="Active timer running">
+                <span
+                  className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+                  style={{ backgroundColor: 'var(--accent-main, #3b82f6)' }}
+                />
+                <span
+                  className="relative inline-flex rounded-full h-2 w-2"
+                  style={{ backgroundColor: 'var(--accent-main, #3b82f6)' }}
+                />
               </span>
             )}
           </div>
@@ -909,7 +914,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
                   className="w-6 h-6 rounded-full transition-all cursor-pointer bg-white hover:bg-zinc-100 text-black hover:scale-105 active:scale-95 flex items-center justify-center shrink-0"
                   title="Start timer for this task"
                 >
-                  <Play className="w-2.5 h-2.5 fill-black text-black ml-0.5" />
+                  <Play className="w-2.5 h-2.5 fill-black text-black" />
                 </button>
               )}
             </div>
@@ -1055,7 +1060,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
   };
 
   return (
-    <div className="w-full pb-16">
+    <div className="w-full max-w-[1366px] mx-auto pb-16">
       {/* Structural Toolbar */}
       <StructureToolbar
         projects={appData.projects}

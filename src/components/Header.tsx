@@ -116,8 +116,7 @@ export const Header: React.FC<HeaderProps> = ({
   const navItems: { view: ViewMode; label: string; icon: React.ReactNode }[] = [
     { view: 'projects', label: 'Tree', icon: <ListTree className="w-5 h-5 shrink-0" /> },
     { view: 'tasks', label: 'Kanban', icon: <Kanban className="w-5 h-5 shrink-0" /> },
-    { view: 'timeline', label: 'Timeline', icon: <CalendarRange className="w-5 h-5 shrink-0" /> },
-    { view: 'gantt', label: 'Gantt', icon: <SquareChartGantt className="w-5 h-5 shrink-0" /> },
+    { view: 'timeline', label: 'Timeline', icon: <SquareChartGantt className="w-5 h-5 shrink-0" /> },
     { view: 'calendar', label: 'Calendar', icon: <CalendarDays className="w-5 h-5 shrink-0" /> },
     { view: 'analytics', label: 'Summary', icon: <BarChart3 className="w-5 h-5 shrink-0" /> },
   ];
@@ -356,6 +355,18 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     onClick={() => {
                       setShowUserMenu(false);
+                      onSelectView('gantt');
+                    }}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#27272a] flex items-center gap-2.5 transition-colors cursor-pointer ${
+                      currentView === 'gantt' ? 'text-orange-400 font-semibold bg-orange-500/10' : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                    }`}
+                  >
+                    <CalendarRange className={`w-4 h-4 ${currentView === 'gantt' ? 'text-orange-400' : 'text-[#71717a]'}`} />
+                    <span>Gantt</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
                       onSelectView('team');
                     }}
                     className={`w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#27272a] flex items-center gap-2.5 transition-colors cursor-pointer ${
@@ -539,6 +550,18 @@ export const Header: React.FC<HeaderProps> = ({
                   >
                     <LayoutDashboard className={`w-4 h-4 ${currentView === 'dashboard' ? 'text-orange-400' : 'text-[#71717a]'}`} />
                     <span>Analytics</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onSelectView('gantt');
+                    }}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#27272a] flex items-center gap-2.5 transition-colors cursor-pointer ${
+                      currentView === 'gantt' ? 'text-orange-400 font-semibold bg-orange-500/10' : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                    }`}
+                  >
+                    <CalendarRange className={`w-4 h-4 ${currentView === 'gantt' ? 'text-orange-400' : 'text-[#71717a]'}`} />
+                    <span>Gantt</span>
                   </button>
                   <button
                     onClick={() => {

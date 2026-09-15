@@ -908,16 +908,23 @@ export const GanttView: React.FC<GanttViewProps> = ({
                       </>
                     )}
 
-                    <span
-                      className={`truncate leading-snug ${
-                        row.isProject
-                          ? 'text-[#f4f4f5] text-xs font-bold'
-                          : 'text-[#f4f4f5] text-sm font-medium'
-                      }`}
-                      title={row.title}
-                    >
-                      {row.title}
-                    </span>
+                    <div className="min-w-0 truncate flex-1 flex flex-col justify-center">
+                      <span
+                        className={`truncate leading-snug ${
+                          row.isProject
+                            ? 'text-[#f4f4f5] text-xs font-bold'
+                            : 'text-[#f4f4f5] text-sm font-medium'
+                        }`}
+                        title={row.title}
+                      >
+                        {row.title}
+                      </span>
+                      {!row.isProject && row.item?.notes && (
+                        <span className="truncate text-[11px] font-normal leading-tight text-[#a1a1aa] mt-0.5" title={row.item.notes}>
+                          {row.item.notes}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Right content: Progress % badge or timer */}

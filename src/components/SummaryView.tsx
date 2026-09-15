@@ -665,7 +665,7 @@ export const SummaryView: React.FC<SummaryViewProps> = ({
   };
 
   return (
-    <div className="w-full space-y-2 pb-16">
+    <div className="w-full max-w-[1366px] mx-auto space-y-2 pb-16">
       {/* Time-Based Unified Toolbar */}
       <TimeBasedToolbar
         projects={appData.projects}

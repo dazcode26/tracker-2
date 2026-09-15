@@ -48,6 +48,26 @@ interface RealizationSegment {
 
 const ONE_HOUR_MS = 60 * 60 * 1000; // 1-hour tolerance for merging nearby session bars (3,600,000 ms)
 
+const hexToRgba = (hex?: string, alpha: number = 0.5): string => {
+  if (!hex || !hex.startsWith('#')) return `rgba(249, 115, 22, ${alpha})`;
+  const c = hex.replace('#', '');
+  if (c.length !== 6 && c.length !== 3) return `rgba(249, 115, 22, ${alpha})`;
+  const full = c.length === 3 ? c.split('').map((x) => x + x).join('') : c;
+  const r = parseInt(full.substring(0, 2), 16);
+  const g = parseInt(full.substring(2, 4), 16);
+  const b = parseInt(full.substring(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(249, 115, 22, ${alpha})`;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const getProjectCardStyle = (projectColor?: string) => {
+  const color = projectColor || '#f97316';
+  return {
+    backgroundColor: hexToRgba(color, 0.5),
+    borderColor: color,
+  };
+};
+
 // Helper to generate solid (opaque) 20% tint of a hex color blended onto white (#ffffff)
 const getSolid20PercentTint = (hex?: string): string => {
   if (!hex || !hex.startsWith('#')) return '#f3f4f6';
@@ -1108,18 +1128,18 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
     );
   });
 
-  // Status color helper for realization bars (no border, no shadow)
+  // Status color helper for realization bars (transparent 50% with solid 100% border)
   const getBarColor = (status: ItemStatus) => {
     if (status === 'completed') {
-      return 'bg-[#10b981] text-white';
+      return 'bg-[#10b981]/50 border border-[#10b981] text-white';
     }
     if (status === 'review') {
-      return 'bg-[#f59e0b] text-slate-950 font-bold';
+      return 'bg-[#f59e0b]/50 border border-[#f59e0b] text-white font-bold';
     }
     if (status === 'in-progress') {
-      return 'bg-orange-500 text-white';
+      return 'bg-orange-500/50 border border-orange-500 text-white';
     }
-    return 'bg-[#3f3f46] text-[#f4f4f5]';
+    return 'bg-[#3f3f46]/50 border border-[#71717a] text-[#f4f4f5]';
   };
 
   const formatD = (d: Date) =>
@@ -1388,10 +1408,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                       >
                         {/* Left Column: Project Node Header (Month) */}
                         <div
-                          style={{
-                            backgroundColor: getSolid20PercentTint(project.color || '#f97316'),
-                          }}
-                          className="sticky left-0 z-30 min-h-[44px] h-full p-2.5 font-bold border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none"
+                          style={getProjectCardStyle(project.color)}
+                          className="sticky left-0 z-30 min-h-[44px] h-full p-2.5 font-bold border border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none"
                           onClick={() => toggleProjectCollapse(project.id)}
                           title={`${isProjectCollapsed ? 'Expand' : 'Collapse'} project: ${project.title}`}
                         >
@@ -1558,9 +1576,16 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                     {item.icon || (hasChildren ? '📁' : '📄')}
                                   </span>
 
-                                  <span className="truncate text-sm font-medium text-[#f4f4f5] group-hover:text-white">
-                                    {item.name}
-                                  </span>
+                                  <div className="min-w-0 truncate flex-1 flex flex-col justify-center">
+                                    <span className="truncate text-sm font-medium text-[#f4f4f5] group-hover:text-white">
+                                      {item.name}
+                                    </span>
+                                    {item.notes && (
+                                      <span className="truncate text-[11px] font-normal leading-tight text-[#a1a1aa] mt-0.5">
+                                        {item.notes}
+                                      </span>
+                                    )}
+                                  </div>
 
                                   {hasChildren && !isExpanded && (
                                     <span className="px-1.5 py-0.2 text-[9px] font-mono rounded bg-[#27272a] text-orange-400/90 border border-orange-500/20 shrink-0">
@@ -1751,10 +1776,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                       >
                         {/* Left Column: Project Node Info */}
                         <div
-                          style={{
-                            backgroundColor: getSolid20PercentTint(project.color || '#f97316'),
-                          }}
-                          className="sticky left-0 z-30 min-h-[44px] h-full p-2.5 font-bold border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none"
+                          style={getProjectCardStyle(project.color)}
+                          className="sticky left-0 z-30 min-h-[44px] h-full p-2.5 font-bold border border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none"
                           onClick={() => toggleProjectCollapse(project.id)}
                           title={`${isProjectCollapsed ? 'Expand' : 'Collapse'} project: ${project.title}`}
                         >
@@ -1920,9 +1943,16 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                     {item.icon || (hasChildren ? '📁' : '📄')}
                                   </span>
 
-                                  <span className="truncate text-sm font-medium text-[#f4f4f5] group-hover:text-white">
-                                    {item.name}
-                                  </span>
+                                  <div className="min-w-0 truncate flex-1 flex flex-col justify-center">
+                                    <span className="truncate text-sm font-medium text-[#f4f4f5] group-hover:text-white">
+                                      {item.name}
+                                    </span>
+                                    {item.notes && (
+                                      <span className="truncate text-[11px] font-normal leading-tight text-[#a1a1aa] mt-0.5">
+                                        {item.notes}
+                                      </span>
+                                    )}
+                                  </div>
 
                                   {hasChildren && !isExpanded && (
                                     <span className="px-1.5 py-0.2 text-[9px] font-mono rounded bg-[#27272a] text-orange-400/90 border border-orange-500/20 shrink-0">
@@ -2117,10 +2147,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                       >
                         {/* Left Column: Project Node Info */}
                         <div
-                          style={{
-                            backgroundColor: getSolid20PercentTint(project.color || '#f97316'),
-                          }}
-                          className="sticky left-0 z-30 min-h-[44px] h-full p-2.5 font-bold border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none"
+                          style={getProjectCardStyle(project.color)}
+                          className="sticky left-0 z-30 min-h-[44px] h-full p-2.5 font-bold border border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none"
                           onClick={() => toggleProjectCollapse(project.id)}
                           title={`${isProjectCollapsed ? 'Expand' : 'Collapse'} project: ${project.title}`}
                         >
@@ -2345,9 +2373,16 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                     {item.icon || (hasChildren ? '📁' : '📄')}
                                   </span>
 
-                                  <span className="truncate text-sm font-medium text-[#f4f4f5] group-hover:text-white">
-                                    {item.name}
-                                  </span>
+                                  <div className="min-w-0 truncate flex-1 flex flex-col justify-center">
+                                    <span className="truncate text-sm font-medium text-[#f4f4f5] group-hover:text-white">
+                                      {item.name}
+                                    </span>
+                                    {item.notes && (
+                                      <span className="truncate text-[11px] font-normal leading-tight text-[#a1a1aa] mt-0.5">
+                                        {item.notes}
+                                      </span>
+                                    )}
+                                  </div>
 
                                   {hasChildren && !isExpanded && (
                                     <span className="px-1.5 py-0.2 text-[9px] font-mono rounded bg-[#27272a] text-orange-400/90 border border-orange-500/20 shrink-0">
@@ -2521,10 +2556,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                       >
                         {/* Left Column: Project Node Info */}
                         <div
-                          style={{
-                            backgroundColor: getSolid20PercentTint(project.color || '#f97316'),
-                          }}
-                          className="sticky left-0 z-30 min-h-[44px] h-full p-2.5 font-bold border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none"
+                          style={getProjectCardStyle(project.color)}
+                          className="sticky left-0 z-30 min-h-[44px] h-full p-2.5 font-bold border border-r border-[#27272a] truncate flex items-center justify-between gap-2 pr-2.5 cursor-pointer select-none"
                           onClick={() => toggleProjectCollapse(project.id)}
                           title={`${isProjectCollapsed ? 'Expand' : 'Collapse'} project: ${project.title}`}
                         >
@@ -2705,9 +2738,16 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                                     {item.icon || (hasChildren ? '📁' : '📄')}
                                   </span>
 
-                                  <span className="truncate text-sm font-medium text-[#f4f4f5] group-hover:text-white">
-                                    {item.name}
-                                  </span>
+                                  <div className="min-w-0 truncate flex-1 flex flex-col justify-center">
+                                    <span className="truncate text-sm font-medium text-[#f4f4f5] group-hover:text-white">
+                                      {item.name}
+                                    </span>
+                                    {item.notes && (
+                                      <span className="truncate text-[11px] font-normal leading-tight text-[#a1a1aa] mt-0.5">
+                                        {item.notes}
+                                      </span>
+                                    )}
+                                  </div>
 
                                   {hasChildren && !isExpanded && (
                                     <span className="px-1.5 py-0.2 text-[9px] font-mono rounded bg-[#27272a] text-orange-400/90 border border-orange-500/20 shrink-0">

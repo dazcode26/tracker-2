@@ -21,11 +21,11 @@ export function getStatusConfig(status?: ItemStatus) {
     case 'in-progress':
       return {
         label: 'In Progress',
-        color: '#f97316',
-        dotBg: 'bg-orange-500',
-        textColor: 'text-orange-400',
-        badgeBg: 'bg-orange-500/15',
-        badgeBorder: 'border-orange-500/30',
+        color: '#3b82f6',
+        dotBg: 'bg-blue-500',
+        textColor: 'text-blue-500',
+        badgeBg: 'bg-blue-500/15',
+        badgeBorder: 'border-blue-500/30',
       };
     case 'review':
       return {

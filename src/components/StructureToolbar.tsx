@@ -229,19 +229,8 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
     >
       <div className="w-full">
         <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-y-2 gap-x-2 md:gap-3 py-1 md:py-0 md:h-9 relative w-full">
-          {/* ACTIONS: ROW 1 ON MOBILE (order-1 w-full), RIGHT SIDE ON DESKTOP (order-2 md:w-auto md:ml-auto) */}
-          <div className="order-1 w-full md:w-auto md:order-2 flex items-center gap-2 md:ml-auto min-w-0">
-            {/* Active Timer Widget: Displayed in toolbar on lg+ screens */}
-            {hasActiveTimer && appData && (
-              <div className="hidden lg:flex items-center shrink min-w-0">
-                <ToolbarActiveTimer
-                  appData={appData}
-                  onStopTimer={onStopTimer}
-                  onOpenItemModal={onOpenEditItemModal}
-                />
-              </div>
-            )}
-
+          {/* ACTIONS: ROW 1 ON MOBILE (order-1 w-full), RIGHT SIDE ON DESKTOP (order-3 md:w-auto md:ml-auto) */}
+          <div className="order-1 w-full md:w-auto md:order-3 flex items-center gap-2 md:ml-auto min-w-0 shrink-0">
             {/* Search Input: Expands full remaining width on mobile, compact fixed width on desktop */}
             <div className="relative flex-1 md:flex-none min-w-0">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#71717a] [data-theme=light]:text-slate-400 pointer-events-none" />
@@ -280,6 +269,17 @@ export const StructureToolbar: React.FC<StructureToolbarProps> = ({
               </span>
             </button>
           </div>
+
+          {/* ACTIVE TIMER WIDGET: Displayed centered in the middle between left toolbar controls & search column */}
+          {hasActiveTimer && appData && (
+            <div className="hidden lg:flex items-center justify-center flex-1 min-w-0 mx-2 order-2">
+              <ToolbarActiveTimer
+                appData={appData}
+                onStopTimer={onStopTimer}
+                onOpenItemModal={onOpenEditItemModal}
+              />
+            </div>
+          )}
 
           {/* FILTERS & SORTING: ROW 2 ON MOBILE (order-2 w-full), LEFT SIDE ON DESKTOP (order-1 md:w-auto md:flex-1) */}
           <div

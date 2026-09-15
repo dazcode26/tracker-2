@@ -12,17 +12,22 @@ interface MenuAnchorState {
   el: HTMLElement;
 }
 
-// Helper to generate solid (opaque) 20% tint of a hex color blended onto white (#ffffff)
-const getSolidKanbanTint = (hex?: string): string => {
-  if (!hex || !hex.startsWith('#')) return '#f3f4f6';
+// Helper to generate solid 20% tint on light mode or 20% transparent project color on dark mode
+const getSolidKanbanTint = (hex?: string, isDark?: boolean): string => {
+  if (!hex || !hex.startsWith('#')) return isDark ? 'rgba(39, 39, 42, 0.2)' : '#f3f4f6';
   const c = hex.replace('#', '');
-  if (c.length !== 6 && c.length !== 3) return '#f3f4f6';
+  if (c.length !== 6 && c.length !== 3) return isDark ? 'rgba(39, 39, 42, 0.2)' : '#f3f4f6';
   const full = c.length === 3 ? c.split('').map((x) => x + x).join('') : c;
   const r = parseInt(full.substring(0, 2), 16);
   const g = parseInt(full.substring(2, 4), 16);
   const b = parseInt(full.substring(4, 6), 16);
-  if (isNaN(r) || isNaN(g) || isNaN(b)) return '#f3f4f6';
-  // 20% project color + 80% white (r: 255, g: 255, b: 255) - solid, zero transparency
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return isDark ? 'rgba(39, 39, 42, 0.2)' : '#f3f4f6';
+  
+  if (isDark) {
+    // Dark mode: 20% transparent project color
+    return `rgba(${r}, ${g}, ${b}, 0.2)`;
+  }
+  // Light mode: 20% project color + 80% white - solid, zero transparency
   const r20 = Math.round(r * 0.2 + 255 * 0.8);
   const g20 = Math.round(g * 0.2 + 255 * 0.8);
   const b20 = Math.round(b * 0.2 + 255 * 0.8);
@@ -259,11 +264,14 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
 
   const STATUS_SEQUENCE: ItemStatus[] = ['not-started', 'in-progress', 'review', 'completed'];
 
+  const isDarkTheme = appData.settings.theme !== 'light';
+
   const getProjectCardStyle = (projectColor?: string) => {
     const color = projectColor || '#f97316';
-    const bg = getSolidKanbanTint(color);
+    const bg = hexToRgba(color, 0.5);
     return {
       backgroundColor: bg,
+      borderColor: color,
     };
   };
 
@@ -272,17 +280,19 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     const fullPathStr = effectivePath.join(' > ');
 
     return (
-      <div className="flex items-center gap-1 text-[11px] font-normal min-w-0 flex-wrap" title={`Full Path: ${fullPathStr}`}>
+      <div className="flex items-center gap-1 text-[11px] leading-tight font-normal min-w-0 flex-wrap" title={`Full Path: ${fullPathStr}`}>
         {effectivePath.map((seg, sIdx) => (
           <React.Fragment key={sIdx}>
             {sIdx > 0 && (
               <ChevronRight
-                className="w-2.5 h-2.5 shrink-0 text-slate-500"
+                className={`w-2.5 h-2.5 shrink-0 ${isDarkTheme ? 'text-white/70' : 'text-slate-500'}`}
               />
             )}
             <span
               className={
-                sIdx === 0
+                isDarkTheme
+                  ? 'text-white font-normal truncate'
+                  : sIdx === 0
                   ? 'text-slate-950 font-normal truncate'
                   : sIdx === effectivePath.length - 1
                   ? 'text-slate-800 font-normal truncate'
@@ -298,7 +308,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   };
 
   return (
-    <div className="w-full h-full flex flex-col min-h-0 pb-0">
+    <div className="w-full max-w-[1366px] mx-auto h-full flex flex-col min-h-0 pb-0">
       {/* Structural Toolbar */}
       <div className="shrink-0">
         <StructureToolbar
@@ -388,7 +398,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                   }
                 }
               }}
-              className={`flex-1 min-w-[260px] sm:min-w-[270px] bg-[#121215] border rounded-lg p-3 flex flex-col h-full min-h-0 shrink-0 transition-all duration-150 ${
+              className={`flex-1 min-w-[220px] sm:min-w-[230px] md:min-w-[240px] bg-[#121215] border rounded-lg p-3 flex flex-col h-full min-h-0 shrink-0 md:shrink transition-all duration-150 ${
                 dragOverColStatus === col.status && !dropTarget
                   ? 'border-orange-500 ring-2 ring-orange-500/50 ring-inset bg-[#16161d] [data-theme=light]:bg-slate-100/90 shadow-sm'
                   : 'border-[#27272a]'
@@ -423,7 +433,9 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                   const estSecs = item.estimatedSeconds || 0;
                   const assignee = appData.persons.find((p) => p.id === item.assigneeId);
                   const reviewer = item.reviewerId ? appData.persons.find((p) => p.id === item.reviewerId) : null;
-                  const cardStyle = getProjectCardStyle(project.color);
+                  const cardStyle = {
+                    ...getProjectCardStyle(project.color),
+                  };
 
                   const statusCfg = getStatusConfig(item.status);
 
@@ -486,36 +498,43 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                         }}
                         style={cardStyle}
                         onClick={() => onOpenEditItemModal(item)}
-                        className={`rounded-lg p-3.5 space-y-2.5 transition-all cursor-grab active:cursor-grabbing group hover:brightness-105 ${
+                        className={`rounded-lg p-3.5 space-y-2.5 transition-all cursor-grab active:cursor-grabbing group hover:brightness-105 border ${
+                          isRunning
+                            ? 'animate-pulse shadow-md'
+                            : ''
+                        } ${
                           draggingItemId === item.id
                             ? 'opacity-40 scale-[0.98] ring-2 ring-orange-500/50'
                             : ''
                         }`}
                       >
-                      {/* Top Header: Breadcrumb */}
-                      <div className="w-full min-w-0">
+                      {/* Top Header: Breadcrumb with Edge-to-Edge Divider */}
+                      <div
+                        className={`-mt-3.5 -mx-3.5 px-3.5 pt-2.5 pb-2.5 border-b ${
+                          isDarkTheme ? 'border-white/10' : 'border-black/10'
+                        }`}
+                      >
                         {renderBreadcrumbs(parentPath, project.title)}
                       </div>
 
-                      {/* Title & Notes - matching Tree view layout with icon on left of both texts */}
-                      <div className="flex items-start gap-2 min-w-0">
-                        <span className="text-sm shrink-0 select-none mt-0.5 leading-none">
-                          {item.icon || (item.subItems && item.subItems.length > 0 ? '📁' : '📄')}
-                        </span>
-                        <div className="flex flex-col min-w-0 flex-1">
+                      {/* Title & Description (Notes) without Emoji Icon */}
+                      <div className="flex flex-col min-w-0 w-full pt-0.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
                           <h4 className="text-sm font-medium transition-colors line-clamp-2 no-underline text-[#f4f4f5] leading-snug">
                             {item.name}
                           </h4>
-
-                          {item.notes && item.notes.trim().length > 0 && (
-                            <p
-                              className="text-[11px] line-clamp-2 no-underline text-[#71717a] font-normal mt-0.5 leading-tight"
-                              title={item.notes}
-                            >
-                              {item.notes}
-                            </p>
-                          )}
                         </div>
+
+                        {item.notes && item.notes.trim().length > 0 && (
+                          <p
+                            className={`text-[11px] line-clamp-2 no-underline font-normal mt-0.5 leading-tight ${
+                              isDarkTheme ? 'text-zinc-300' : 'text-slate-600'
+                            }`}
+                            title={item.notes}
+                          >
+                            {item.notes}
+                          </p>
+                        )}
                       </div>
 
                       {/* Time Progress Bar */}
@@ -710,7 +729,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                               className="w-6 h-6 rounded-full transition-all cursor-pointer bg-white hover:bg-zinc-100 text-black hover:scale-105 active:scale-95 flex items-center justify-center shrink-0"
                               title="Start Timer"
                             >
-                              <Play className="w-2.5 h-2.5 fill-black text-black ml-0.5" />
+                              <Play className="w-2.5 h-2.5 fill-black text-black" />
                             </button>
                           )}
 
@@ -726,7 +745,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                                     : { id: item.id, rect: e.currentTarget.getBoundingClientRect(), el: e.currentTarget }
                                 );
                               }}
-                              className="h-6 inline-flex items-center gap-1.5 px-2.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:bg-zinc-100 bg-white text-zinc-900 select-none border-0 shrink-0"
+                              className="h-6 inline-flex items-center gap-1.5 px-2.5 rounded-full text-[10px] font-medium cursor-pointer transition-all hover:bg-zinc-100 bg-white text-zinc-900 select-none border-0 shrink-0"
                               title="Click to change task status"
                             >
                               <span

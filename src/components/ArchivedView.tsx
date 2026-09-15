@@ -16,7 +16,7 @@ export const ArchivedView: React.FC<ArchivedViewProps> = ({
   const archivedProjects = appData.projects.filter((p) => p.status === 'archived');
 
   return (
-    <div className="space-y-6 w-full pb-16 pt-4 md:pt-6">
+    <div className="space-y-6 w-full max-w-[1366px] mx-auto pb-16 pt-4 md:pt-6">
       <div>
         <h2 className="text-xl font-bold text-[#dae2fd]">Archived Projects</h2>
         <p className="text-xs text-[#8c909f] mt-0.5">
